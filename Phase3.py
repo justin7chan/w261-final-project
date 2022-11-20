@@ -477,7 +477,29 @@ corr_matrix = plot_correlation_matrix(clean_airlines_df, title="Clean Airlines C
 
 # COMMAND ----------
 
-display(raw_stations_df)
+dbutils.data.summarize(raw_stations_df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Within this dataframe, logically, we found that the station’s “distance_to_neighbor” would be the most important feature to apply to our model, given that the closer a station is to an airport in proximity, the higher likelihood that the weather forecast/data is accurate. Since inclement weather can often impact flight delays, we decided to run a groupBy on states and measure each station’s average distance to neighbor, expecting more remote states to be farther away from stations. The chart below shows the output. 
+
+# COMMAND ----------
+
+dist_by_state = raw_stations_df.select('distance_to_neighbor', 'neighbor_state')
+df_by_state = dist_by_state.groupBy(dist_by_state['neighbor_state']).mean('distance_to_neighbor')
+
+df_by_state.toPandas().sort_values('avg(distance_to_neighbor)', ascending=False).plot.bar(x='neighbor_state', y='avg(distance_to_neighbor)', figsize=(30,10), ylabel = 'Distance', xlabel = 'Neighbor State', title='Average Distance to Neighbor by State', fontsize=25)
+plt.xlabel('Neighbor State', size=30)
+plt.ylabel('Average Distance', size=30)
+plt.title('Average Distance to Neighbor by State', size = 40)
+plt.legend(prop={'size':20})
+plt.show()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC The chart above confirmed our expectations around more remote stations in states such as Hawaii, Alaska, and the Virgin Islands having further average distances to neighbors. We also explored using the Haversine formula to calculate an alternative distance to neighbor to quantify the shortest distance between a station’s latitude and longitude and its neighbor’s latitude and longitude, but the results did not have a significant impact on our findings; therefore, we decided to stick with the stock distance to neighbor initially provided in the dataframe.
 
 # COMMAND ----------
 
