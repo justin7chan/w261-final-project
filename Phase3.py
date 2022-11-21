@@ -805,23 +805,15 @@ def get_timezone(AIRPORT):
 early_threshold = 4
 late_threshold = 1
 
-join_airlines_df = clean_airlines_df \
-    .withColumn('FL_DATE', format_date_column()) \
+tz_airlines_df = clean_airlines_df \
     .withColumn("ORIGIN_TIMEZONE", get_timezone(F.col("ORIGIN"))) \
     .withColumn("UNIX_CRS_DEP_TIME_UTC", format_unix_column("CRS_DEP_TIME", "ORIGIN_TIMEZONE")) \
     .withColumn('EARLY_LIMIT', F.col("UNIX_CRS_DEP_TIME_UTC") - (early_threshold*3600)) \
     .withColumn('LATE_LIMIT', F.col("UNIX_CRS_DEP_TIME_UTC") + (late_threshold*3600))
 
 # Format weather date to [yyyy-MM-dd HH:mm:ss]
-# join_weather_df = clean_weather_df.withColumn('DATE', F.regexp_replace('DATE', 'T', ' ')) \
-#     .withColumn("unix_weather_time", F.unix_timestamp(F.col("DATE"),"yyyy-MM-dd HH:mm:ss")) \
-#     .withColumn('_date', F.to_date(clean_weather_df['DATE'])) \
-#     .withColumn('time', F.split(weather_df['DATE'], ' ').getItem(1)) \
-#     .drop(weather_df.DATE)
-
-# COMMAND ----------
-
-display(clean_weather_df)
+tz_weather_df = clean_weather_df.withColumn('DATE', F.regexp_replace('DATE', 'T', ' ')) \
+    .withColumn("unix_weather_time", F.unix_timestamp(F.col("DATE"),"yyyy-MM-dd HH:mm:ss"))
 
 # COMMAND ----------
 
@@ -834,30 +826,39 @@ display(clean_weather_df)
 
 # MAGIC %md
 # MAGIC ##### Data Imbalance
-# MAGIC When looking at the data, we noticed that there was an imbalance of the output variable `DEP_DEL15`.  Our solution was to sample an equal number of outputs from each category. Although we will lose a lot of valuable data, it will give us more consistent results and speed up our training process. We can use accuracy as an evaluation metric instead of precision or recall.
+# MAGIC Due to the volume of data, a sampling technique has to be implemented to reduce bias. We sampled an equal number of airlines with departure delay times over 15 minutes and under 15 minutes. This will minimize data set imbalance and allow an equal number of false positives, false negatives, true positives, and true negatives. Although we will lose a lot of valuable data, it will give us more consistent results and speed up our training process. We can use accuracy as an evaluation metric instead of precision or recall.
 
 # COMMAND ----------
 
 # DBTITLE 1,See number of delayed and non-delayed flights
-dep_del15_0_ct = clean_airlines_df.filter(F.col("DEP_DEL15")==0).count()
-dep_del15_1_ct = clean_arilines_df.filter(F.col("DEP_DEL15")==1).count()
+dep_del15_0_ct = tz_airlines_df.filter(F.col("DEP_DEL15")==0).count()
+dep_del15_1_ct = tz_airlines_df.filter(F.col("DEP_DEL15")==1).count()
 fraction = dep_del15_1_ct / dep_del15_0_ct
 
-print(dep_del15_0_ct)
-print(dep_del15_1_ct)
-print(fraction)
+print(f"Number of Non-Delayed Flights: {dep_del15_0_ct}")
+print(f"Number of Delayed Flights: {dep_del15_1_ct}")
+print(f"Ratio of Delayed to Non-Delayed Flights: {fraction}")
 
 # COMMAND ----------
 
 # DBTITLE 1,Balance Data
-new_dep_del15_0 = join3.filter(F.col("DEP_DEL15")==0).sample(False, fraction)
-old_dep_del15_1 = join3.filter(F.col("DEP_DEL15")==1)
+new_dep_del15_0 = tz_airlines_df.filter(F.col("DEP_DEL15")==0).sample(False, fraction)
+old_dep_del15_1 = tz_airlines_df.filter(F.col("DEP_DEL15")==1)
 balanced_airlines_df = new_dep_del15_0.union(old_dep_del15_1)
+
+print(f"New number of Non-Delayed Flights: {new_dep_del15_0.count()}")
+print(f"New number of Delayed Flights: {old_dep_del15_1.count()}")
+print(f"Total number of flights: {balanced_airlines_df.count()}")
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC #### Join Process
+# MAGIC - TODO: Edit paragraph
+# MAGIC - TODO: Edit join diagram
+# MAGIC - TODO: Add time it took to join
+# MAGIC 
+# MAGIC We took a two-pronged approach to joining the dataframes. We started by joining the ORIGIN feature from the Airlines dataframe with the airport_id column from the Stations dataframe as well as the ORIGIN_STATE_ABR feature from the Airlines dataframe with neighbor_state from the Stations dataframe. Next, we joined the FL_DATE feature from the Airlines and Stations dataframes with the _date column from the weather dataframe. Finally, we joined the station_id column from the Airlines and Stations dataframe with the STATION column from the weather dataframe. We show a diagram of our two-tiered join strategy below.
 
 # COMMAND ----------
 
@@ -875,8 +876,12 @@ balanced_airlines_df = new_dep_del15_0.union(old_dep_del15_1)
 
 # MAGIC %md
 # MAGIC ### Metrics
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Summary Statistic
 # MAGIC - TODO: Row and column count
-# MAGIC - TODO: Summary Statistic
 
 # COMMAND ----------
 
