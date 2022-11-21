@@ -70,6 +70,27 @@ raw_stations_df = spark.read.parquet(f"{data_BASE_DIR}stations_data/*")
 
 # COMMAND ----------
 
+# DBTITLE 1,Blob Storage Setup
+blob_container = "latam" # The name of your container created in https://portal.azure.com
+storage_account = "mrubino" # The name of your Storage account created in https://portal.azure.com
+secret_scope = "sect3group2" # The name of the scope created in your local computer using the Databricks CLI
+secret_key = "sect3group2key" # saskey The name of the secret key created in your local computer using the Databricks CLI 
+blob_url = f"wasbs://{blob_container}@{storage_account}.blob.core.windows.net"
+mount_path = "/mnt/mids-w261"
+
+spark.conf.set(f"fs.azure.sas.{blob_container}.{storage_account}.blob.core.windows.net", dbutils.secrets.get(scope = secret_scope, key = secret_key))
+
+# COMMAND ----------
+
+# DBTITLE 1,Read clean tables from storage if applicable (update filepath as needed)
+# Make sure that the filepath version is the latest one
+clean_airlines_df = spark.read.parquet(f"{blob_url}/clean_airlines_1")
+clean_weather_df = spark.read.parquet(f"{blob_url}/clean_weather_1")
+clean_stations_df = spark.read.parquet(f"{blob_url}/clean_stations_2")
+final_df = spark.read.parquet(f"{blob_url}/final_df_5")
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ## Abstract
 # MAGIC 
@@ -121,13 +142,18 @@ raw_stations_df = spark.read.parquet(f"{data_BASE_DIR}stations_data/*")
 
 # MAGIC %md
 # MAGIC #### Airlines
-# MAGIC The airline dataset containing flights from 2015 to 2021 inclusive has 74,177,433 total rows and 109 fields of data. Our response variable is `DEP_DEL15` which is a binary variable which states if a flight is delayed by more than 15 minutes or not. We can use this information to do some intial EDA to cut down the number of records by cleaning the dataframe.
+# MAGIC The airline dataset containing flights from 2015 to 2021 inclusive has 74,177,433 total rows and 109 fields of data. Each row corresponds to an individual flight within the United States. Our response variable is `DEP_DEL15` which is a binary variable which states if a flight is delayed by more than 15 minutes or not. We can use this information to do some intial EDA to cut down the number of records by cleaning the dataframe.
 
 # COMMAND ----------
 
 # DBTITLE 1,Display raw row and column count
 print(f"Raw Airlines Row Count: {raw_airlines_df.count()}")
 print(f"Raw Airlines Column Count: {len(raw_airlines_df.columns)}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC We also took a look at a summarization of the raw dataset
 
 # COMMAND ----------
 
@@ -266,6 +292,9 @@ prim_keys_airlines_df = drop_cols_airlines_df \
     .distinct()
 
 dupe_flights = prim_keys_airlines_df.select(primary_keys).groupBy(primary_keys).count().filter(F.col("count") > 1)
+
+# COMMAND ----------
+
 display(dupe_flights)
 
 # COMMAND ----------
@@ -284,6 +313,8 @@ clean_airlines_df = prim_keys_airlines_df \
     .filter(F.col("count")==1) \
     .drop(*["lit1", "count"]) \
     .cache()
+
+# COMMAND ----------
 
 dupe_count = clean_airlines_df.select(primary_keys).groupBy(primary_keys).count().filter(F.col("count") > 1).count()
 print(f"Number of duplicate records: {dupe_count}")
@@ -338,8 +369,7 @@ print(f"Clean Airlines Column Count: {len(clean_airlines_df.columns)}")
 # COMMAND ----------
 
 # DBTITLE 1,Run Data Profile over clean airlines dataframe
-# See Data Profile
-display(clean_airlines_df)
+dbutils.data.summarize(clean_airlines_df)
 
 # COMMAND ----------
 
@@ -408,7 +438,7 @@ display(clean_airlines_df.groupBy("DEST_STATE_ABR").count())
 # MAGIC %md
 # MAGIC ##### Correlation Matrix
 # MAGIC 
-# MAGIC In order to better understand our data, we created a correlation matrix between each variable. The string data type columns were transformed into integers in order to calculate Pearson's correlation matrix. We can see a dark blue diagonal line which indicates that each column is perfectly correlated with itself. Origin and destination airports are highly correlated with its respective state and airport code. The correlated fields such as “ORIGIN_AIRPORT_ID” and “DEST_AIRPORT_ID” are used to join on other datasets and will be dropped later.
+# MAGIC In order to better understand our data, we created a correlation matrix between each variable. The string data type columns were transformed into integers in order to calculate Pearson's correlation matrix. We can see a dark blue diagonal line which indicates that each column is perfectly correlated with itself. Origin and destination airports are highly correlated with its respective state and airport code. The correlated fields such as `ORIGIN_AIRPORT_ID` and `DEST_AIRPORT_ID` are used to join on other datasets and will be dropped later.
 
 # COMMAND ----------
 
@@ -450,13 +480,32 @@ def plot_correlation_matrix(df, method='pearson', title="Correlation Matrix"):
     );
     return corr_mat_df
 
-corr_matrix = plot_correlation_matrix(clean_airlines_df, title="Clean Airlines Correlation Matrix")
+# COMMAND ----------
+
+airlines_cor_matrix =plot_correlation_matrix(clean_airlines_df, title="Clean Airlines Correlation Matrix")
+
+# COMMAND ----------
+
+# DBTITLE 1,Write into blob storage
+clean_airlines_df.write.mode("overwrite").parquet(f"{blob_url}/clean_airlines_1")
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC #### Stations
-# MAGIC When performing exploratory data analysis on the raw features of the stations. We first understood the underlying data including its meaning by referencing a data dictionary that we compiled from various sources, which we show below.
+# MAGIC 
+# MAGIC Looking at the row and column count, the raw stations datafrmae contains 5,004,169 rows and 12 columns.
+
+# COMMAND ----------
+
+print(f"Raw Stations Row Count: {raw_stations_df.count()}")
+print(f"Raw Stations Column Count: {len(raw_stations_df.columns)}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Data Dictionary
+# MAGIC When performing exploratory data analysis on the raw features of the stations, we first looked at the underlying data including its definition by referencing a data dictionary that we compiled from various sources, which we show below.
 # MAGIC 
 # MAGIC Field                | Description                                                                                                                                      | Data Type
 # MAGIC -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------
@@ -472,8 +521,12 @@ corr_matrix = plot_correlation_matrix(clean_airlines_df, title="Clean Airlines C
 # MAGIC neighbor_lat         | Latitude coordinates of the airport close to the weather station                                                                                 | DOUBLE
 # MAGIC neighbor_lon         | Latitude coordinates of the airport close to the weather station                                                                                 | DOUBLE
 # MAGIC distance_to_neighbor |  Distance of the airport to the weather station.                                                                                                 | STRING
-# MAGIC 
-# MAGIC Next, we looked for null values within the dataframe; fortunately, this dataframe required little pre-processing, given there were no null values contained within the dataframe. We then looked at the dataframe at a high level, using the summarize function to better understand summary statistics of each of the features as is shown below. We also saw that there are no missing values for any of the fields, so data cleaning was not required.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Summary Statistic
+# MAGIC Next, we looked for null values within the dataframe; fortunately, this dataframe required little pre-processing, given there were no null values contained within the dataframe. We then looked at the dataframe at a high level, using the summarize function to better understand summary statistics of each of the features as is shown below.
 
 # COMMAND ----------
 
@@ -482,6 +535,7 @@ dbutils.data.summarize(raw_stations_df)
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ##### Station Distance to Neighbor
 # MAGIC Within this dataframe, logically, we found that the station’s “distance_to_neighbor” would be the most important feature to apply to our model, given that the closer a station is to an airport in proximity, the higher likelihood that the weather forecast/data is accurate. Since inclement weather can often impact flight delays, we decided to run a groupBy on states and measure each station’s average distance to neighbor, expecting more remote states to be farther away from stations. The chart below shows the output. 
 
 # COMMAND ----------
@@ -504,17 +558,197 @@ plt.show()
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ##### Duplicate Stations
+# MAGIC 
+# MAGIC With almost 5 million rows, we can see that there is a high possibility that there are duplicate stations. Since each row represents an edge between stations and airport, there is a possibility that a station can point to numerous airports and vice versa. To ensure that each row is distinct such that each station only contains a unique airport, we decided to use the closest airport distance to station using a window function. 
+
+# COMMAND ----------
+
+w3 = Window.partitionBy("neighbor_call").orderBy(F.col("distance_to_neighbor").asc())
+clean_stations_df = raw_stations_df.withColumn("row", F.row_number().over(w3)) \
+                              .filter(F.col("row") == 1).drop("row")
+
+# COMMAND ----------
+
+display(clean_stations_df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC After the cleaning of the dataframe, we are left with 2,229 rows which greatly reduces the complexity of our joins
+
+# COMMAND ----------
+
+print(f"Clean Stations Row Count: {clean_stations_df.count()}")
+print(f"Clean Stations Column Count: {len(clean_stations_df.columns)}")
+
+# COMMAND ----------
+
+dbutils.data.summarize(clean_stations_df)
+
+# COMMAND ----------
+
+# DBTITLE 1,Write into blob storage
+clean_stations_df.write.mode("overwrite").parquet(f"{blob_url}/clean_stations_1")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC #### Weather
+# MAGIC 
+# MAGIC Within the weather dataframe, there were 126 columns and 898,983,399 rows to explore, with features ranging from `STATION` to `HourlyVisibility` and `HourlyWindSpeed`.  The weather data is important for predicting flight delays as pilots cannot always fly safely in inclement weather. 
+
+# COMMAND ----------
+
+print(f"Raw Weather Row Count: {raw_weather_df.count()}")
+print(f"Raw Weather Column Count: {len(raw_weather_df.columns)}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Feature Selection
+# MAGIC After ingesting and profiling the data, we learned that the majority of the columns have missing or null values.  We performed a variety of pre-processing steps including dropping data that had null values and casting appropriate data types such as integer for columns containing temperature, speed, or direction and double for `latitude`, `longitude`, `elevation`, `HourlyAltimeterSetting`, `HourlySeaLevelPressure`, `HourlyStationPressue`, and `HourlyVisibility`.  The columns with at least 70% missing or null values were excluded from the dataset because we still had plenty of weather statistics post-exclusion.
+# MAGIC 
+# MAGIC Additional fields we decided to drop were monthly, daily, and backup features because these features did not give us the amount of granularity that we needed in our analysis. This allowed us to drop numerous features while maintaining a the same information.
+
+# COMMAND ----------
+
+weather_cols = [
+    "STATION",
+    "DATE",
+    "LATITUDE",
+    "LONGITUDE",
+    "ELEVATION",
+    "NAME",
+    "REPORT_TYPE",
+    "SOURCE",
+    "HourlyAltimeterSetting",
+    "HourlyDewPointTemperature",
+    "HourlyDryBulbTemperature",
+    "HourlyRelativeHumidity",
+    "HourlySkyConditions",
+    "HourlyStationPressure",
+    "HourlyVisibility",
+    "HourlyWetBulbTemperature",
+    "HourlyWindDirection",
+    "HourlyWindSpeed"
+]
+
+clean_weather_df = raw_weather_df \
+    .select(weather_cols) \
+    .withColumn("HourlyDewPointTemperature", F.col("HourlyDewPointTemperature").cast(T.DoubleType())) \
+    .withColumn("HourlyDryBulbTemperature", F.col("HourlyDryBulbTemperature").cast(T.DoubleType())) \
+    .withColumn("HourlyRelativeHumidity", F.col("HourlyRelativeHumidity").cast(T.DoubleType())) \
+    .withColumn("HourlyWetBulbTemperature", F.col("HourlyWetBulbTemperature").cast(T.DoubleType())) \
+    .withColumn("HourlyWindDirection", F.col("HourlyWindDirection").cast(T.DoubleType())) \
+    .withColumn("HourlyWindSpeed", F.col("HourlyWindSpeed").cast(T.DoubleType())) \
+    .withColumn("LATITUDE", F.col("LATITUDE").cast(T.DoubleType())) \
+    .withColumn("LONGITUDE", F.col("LONGITUDE").cast(T.DoubleType())) \
+    .withColumn("ELEVATION", F.col("ELEVATION").cast(T.DoubleType())) \
+    .withColumn("HourlyAltimeterSetting", F.col("HourlyAltimeterSetting").cast(T.DoubleType())) \
+    .withColumn("HourlyStationPressure", F.col("HourlyStationPressure").cast(T.DoubleType())) \
+    .withColumn("HourlyVisibility", F.col("HourlyVisibility").cast(T.DoubleType())) \
+    .na.drop("any") \
+    .distinct()
+
+# COMMAND ----------
+
+display(clean_weather_df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC The pre-processing and cleaning of the dataframe brought our total rough count down to 215,666,248 with 18 columns. 
+
+# COMMAND ----------
+
+print(f"Clean Weather Row Count: {clean_weather_df.count()}")
+print(f"Clean Weather Column Count: {len(clean_weather_df.columns)}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Data Dictionary
+# MAGIC We have created a data dictionary from our subsetted features that we deemed useful in our analysis.
+# MAGIC 
+# MAGIC Field                     | Description                                                        | Data Type 
+# MAGIC ------------------------- | ------------------------------------------------------------------ | ---------
+# MAGIC STATION                   | Identifier for the weather station                                 | STRING
+# MAGIC DATE                      | Date of the when the data is pulled                                | STRING
+# MAGIC LATITUDE                  | Latitude coordinates of the weather station                        | DOUBLE 
+# MAGIC LONGITUDE                 |  Longitude coordinates of the weather station                      | DOUBLE
+# MAGIC ELEVATION                 | Elevation of the weather station                                   | DOUBLE
+# MAGIC NAME                      | Name of the weather station                                        | STRING
+# MAGIC REPORT_TYPE               | The code that denotes the type of geophysical surface observation  | STRING
+# MAGIC SOURCE                    | Code for weather station                                           | STRING
+# MAGIC HourlyAltimeterSetting    | Altimeter Setting Value                                            | DOUBLE
+# MAGIC HourlyDewPointTemperature | Dew Point Temperature of the weather station at a particular date. | DOUBLE
+# MAGIC HourlyDryBulbTemperature  | Dry Bulb Temperature of the weather station at a particular date.  | DOUBLE
+# MAGIC HourlyRelativeHumidity    | Relative Humidity of the weather station at a particular date.     | DOUBLE
+# MAGIC HourlySkyConditions       | Description of sky conditions at a particular date                 | DOUBLE
+# MAGIC HourlyStationPressure     | Station Pressure of the weather station at a particular date.      | DOUBLE
+# MAGIC HourlyVisibility          | Visibility of the weather station at a particular date.            | DOUBLE
+# MAGIC HourlyWetBulbTemperature  | Wet Bulb Temperature of the weather station at a particular date.  | DOUBLE
+# MAGIC HourlyWindDirection       | Wind Direction of the weather station at a particular date.        | DOUBLE
+# MAGIC HourlyWindSpeed           | Wind Speed of the weather station at a particular date.            | DOUBLE
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Summary Statistic
+# MAGIC 
+# MAGIC We then took a look at the summary statistics of the clean dataframe. We show a sample of the summary statistics below, but the full statistics can be found in the Weather EDA databricks notebook.
+
+# COMMAND ----------
+
+dbutils.data.summarize(clean_weather_df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC We then found the number of statistics for the weather by year to ensure that each year had a roughly similar level of data, using the groupBy, count, and orderBy functions. The below table allowed us to visually find that each year had around 33 million to 35 million weather points. 
+
+# COMMAND ----------
+
+display(clean_weather_df \
+        .withColumn("YEAR", F.split(F.col("DATE"), '-').getItem(0)) \
+        .groupBy("YEAR").count().orderBy("YEAR"))
+
+# COMMAND ----------
+
+# DBTITLE 1,Write into blob storage
+clean_weather_df.write.mode("overwrite").parquet(f"{blob_url}/clean_weather_2")
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ### Join
+# MAGIC 
+# MAGIC To train our model with the data, we require to join all of the tables which are airlines, stations, and weather.
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC #### Timezone Format
+# MAGIC #### Preprocessing
+# MAGIC 
+# MAGIC However, before we join all of the tables together, we have to apply a number of preprocessing steps on each table such as formatting timezones and airport ids so that we can easily join on their corresponding fields. We also plan on applying some additional fields that pertain to COVID to see how it has impacted flight delays
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Station to Airport ID
+# MAGIC To join the stations data with airlines, it needs a common key between the datasets. We have identified that stations contained a field called `neighbor_call` which contains the airport id within the last three characters. We used this information to reformat `neighbor_call` with just the necessary letters so that it can join on the airlines dataframe
+
+# COMMAND ----------
+
+# DBTITLE 1,Get Airport ID
+join_stations_df = clean_stations_df.withColumn("neighbor_call", F.col("neighbor_call").substr(-3,3))
+display(join_stations_df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Timezone Format
 # MAGIC In order to join on the weather data, we needed to create a uniform standard for time since airlines data was local timezone whereas weather data was UTC timezone. Therefore, we required the timezone of the airport which we grabbed from an open source file. The conversion was applied to `CRS_DEP_TIME` and `DEP_TIME`. Then, we created a unix timestamp from the UTC datetime timestamp to make date ranges easier to calculate. Our data only looks at weather data 4 hours prior and 1 hour after departures which we've labeled as `EARLY_LIMIT` and `LATE_LIMIT`.
 # MAGIC 
 # MAGIC It is also important to note that we are keeping the local timezone in the final join since time relative to timezone can be correlated with peak traffic.
@@ -556,7 +790,7 @@ def format_time_column(colname):
 def format_date_column():
     return F.concat(F.col("YEAR"), F.lit("-"), F.lpad(F.col("MONTH"), 2, "0"), F.lit("-"), F.lpad(F.col("DAY_OF_MONTH"), 2, "0"))
 
-# Converts the date into a unix timestamp
+# Converts the date [yyyy-MM-dd HH:mm:ss] into a unix timestamp
 def format_unix_column(colname, timezone):
     return F.unix_timestamp(F.to_utc_timestamp(F.concat(format_date_column(), F.lit(" "), format_time_column(colname)), F.col(timezone)))
 
@@ -567,29 +801,98 @@ def get_timezone(AIRPORT):
 
 # COMMAND ----------
 
-# DBTITLE 1,Call functions for datetime conversions
+# DBTITLE 1,Call functions for datetime conversions on tables
 early_threshold = 4
 late_threshold = 1
 
-join_clean_airlines_df = clean_airlines_df \
+join_airlines_df = clean_airlines_df \
     .withColumn('FL_DATE', format_date_column()) \
     .withColumn("ORIGIN_TIMEZONE", get_timezone(F.col("ORIGIN"))) \
-    .withColumn("DEST_TIMEZONE", get_timezone(F.col("DEST"))) \
     .withColumn("UNIX_CRS_DEP_TIME_UTC", format_unix_column("CRS_DEP_TIME", "ORIGIN_TIMEZONE")) \
     .withColumn('EARLY_LIMIT', F.col("UNIX_CRS_DEP_TIME_UTC") - (early_threshold*3600)) \
     .withColumn('LATE_LIMIT', F.col("UNIX_CRS_DEP_TIME_UTC") + (late_threshold*3600))
 
+# Format weather date to [yyyy-MM-dd HH:mm:ss]
+# join_weather_df = clean_weather_df.withColumn('DATE', F.regexp_replace('DATE', 'T', ' ')) \
+#     .withColumn("unix_weather_time", F.unix_timestamp(F.col("DATE"),"yyyy-MM-dd HH:mm:ss")) \
+#     .withColumn('_date', F.to_date(clean_weather_df['DATE'])) \
+#     .withColumn('time', F.split(weather_df['DATE'], ' ').getItem(1)) \
+#     .drop(weather_df.DATE)
+
+# COMMAND ----------
+
+display(clean_weather_df)
+
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC #### COVID Impact
+# MAGIC ##### COVID Impact
 # MAGIC In our EDA, we discovered that COVID had a huge impact on flights and the volume of it. To compensate for this anomaly, we decided to add a dummy variable called `COVID` which marked the beginning of travel bans for international flights during the Trump Administration. 
 # MAGIC - TODO: What's start (March 2020) and end date
 
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ##### Data Imbalance
+# MAGIC When looking at the data, we noticed that there was an imbalance of the output variable `DEP_DEL15`.  Our solution was to sample an equal number of outputs from each category. Although we will lose a lot of valuable data, it will give us more consistent results and speed up our training process. We can use accuracy as an evaluation metric instead of precision or recall.
+
+# COMMAND ----------
+
+# DBTITLE 1,See number of delayed and non-delayed flights
+dep_del15_0_ct = clean_airlines_df.filter(F.col("DEP_DEL15")==0).count()
+dep_del15_1_ct = clean_arilines_df.filter(F.col("DEP_DEL15")==1).count()
+fraction = dep_del15_1_ct / dep_del15_0_ct
+
+print(dep_del15_0_ct)
+print(dep_del15_1_ct)
+print(fraction)
+
+# COMMAND ----------
+
+# DBTITLE 1,Balance Data
+new_dep_del15_0 = join3.filter(F.col("DEP_DEL15")==0).sample(False, fraction)
+old_dep_del15_1 = join3.filter(F.col("DEP_DEL15")==1)
+balanced_airlines_df = new_dep_del15_0.union(old_dep_del15_1)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Join Process
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Drop select columns
+# MAGIC 
+# MAGIC After joining the tables, we can drop some of the keys that are no longer relevant such as join keys and highly correlated fields.
+
+# COMMAND ----------
+
+# DBTITLE 1,Write to blob storage
+
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ### Metrics
+# MAGIC - TODO: Row and column count
+# MAGIC - TODO: Summary Statistic
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Correlation Matrix
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Input vs Output Variable
+
+# COMMAND ----------
+
+# pair_plot_lat_dep_del = sample_final_df.pandas_api().pivot(columns='DEP_DEL15', values='HOURLY_WIND_SPEED')
+# pair_plot_lat_dep_del.plot.hist(bins=50, figsize=(6,6), alpha=0.7)  
+# pair_plot_lat_dep_del.title("Hourly Wind Speed and Departure Delay Past 15 Minutes")
 
 # COMMAND ----------
 
@@ -666,7 +969,13 @@ join_clean_airlines_df = clean_airlines_df \
 # MAGIC > - No Credit assignment plan means ZERO points
 # MAGIC > - A credit assignment plan not in Table format means ZERO points
 # MAGIC > - No start and end dates and (budgeted) hours of effort mean an incomplete plan. This may result in zero points.
+# MAGIC 
+# MAGIC | Task | Estimated Improvement | Hours Spent | Start Date | End Date | Team Member
+# MAGIC | ---- | --------------------- | ----------- | ---------- | -------- | ----------- |
+# MAGIC | Migrate Google Doc to Jupyter Notebook           | 0 | 24 | 11/19 | 11/22 | Steven Sung |
+# MAGIC | Clean weather data by removing extra nulls       | 0 | 3  | 11/20 | 11/20 | Steven Sung |
+# MAGIC | Added COVID flight restriction binary variable   |   |    |       |       | Steven Sung |
 
 # COMMAND ----------
 
-
+|
