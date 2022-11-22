@@ -65,8 +65,8 @@ display(dbutils.fs.ls(f"{data_BASE_DIR}"))
 
 # DBTITLE 1,Read raw parquet files
 raw_airlines_df = spark.read.parquet(f"{data_BASE_DIR}parquet_airlines_data/")
-raw_weather_df = spark.read.parquet(f"{data_BASE_DIR}parquet_weather_data/")
 raw_stations_df = spark.read.parquet(f"{data_BASE_DIR}stations_data/*")
+raw_weather_df = spark.read.parquet(f"{data_BASE_DIR}parquet_weather_data/")
 
 # COMMAND ----------
 
@@ -85,9 +85,9 @@ spark.conf.set(f"fs.azure.sas.{blob_container}.{storage_account}.blob.core.windo
 # DBTITLE 1,Read clean tables from storage if applicable (update filepath as needed)
 # Make sure that the filepath version is the latest one
 clean_airlines_df = spark.read.parquet(f"{blob_url}/clean_airlines_1")
-clean_weather_df = spark.read.parquet(f"{blob_url}/clean_weather_1")
-clean_stations_df = spark.read.parquet(f"{blob_url}/clean_stations_2")
-final_df = spark.read.parquet(f"{blob_url}/final_df_5")
+clean_stations_df = spark.read.parquet(f"{blob_url}/clean_stations_1")
+clean_weather_df = spark.read.parquet(f"{blob_url}/clean_weather_2")
+final_df = spark.read.parquet(f"{blob_url}/final_df_6")
 
 # COMMAND ----------
 
@@ -589,7 +589,7 @@ dbutils.data.summarize(clean_stations_df)
 # COMMAND ----------
 
 # DBTITLE 1,Write into blob storage
-clean_stations_df.write.mode("overwrite").parquet(f"{blob_url}/clean_stations_1")
+clean_stations_df.write.mode("overwrite").parquet(f"{blob_url}/clean_stations_2")
 
 # COMMAND ----------
 
@@ -757,11 +757,17 @@ display(join_stations_df)
 # MAGIC Field                 | Description                                                                                                                     | Data Type
 # MAGIC --------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------
 # MAGIC ORIGIN_TIMEZONE       | Timezone of Origin Airport                                                                                                      | STRING
-# MAGIC DEST_TIMEZONE         | Timezone of Destination Airport                                                                                                 | STRING
 # MAGIC UNIX_CRS_DEP_TIME_UTC | Unix timestamp of CRS Departure Time in UTC                                                                                     | INTEGER
 # MAGIC EARLY_LIMIT           | Unix timestamp 4 hours prior of CRS Departure Time                                                                              | INTEGER
 # MAGIC LATE_LIMIT            | Unix timestamp 1 hour after CRS Departure Time                                                                                  | INTEGER
 # MAGIC WEATHER_DEP_DIFF_TIME | Represents a custom field we created, which is the difference between CRS_DEP_TIME and UNIX_WEATHER_TIME from the weather table | INTEGER
+# MAGIC FL_DATE               | Date in yyyy-mm-dd format                                                                                                       | STRING
+# MAGIC 
+# MAGIC For the weather data, we added an additional field to join with the airlines data
+# MAGIC Field             | Description                           | Data Type
+# MAGIC ----------------- | ------------------------------------- | ---------
+# MAGIC UNIX_WEATHER_TIME | Unix timestamp of weather time in UTC | INTEGER 
+# MAGIC FL_DATE           | Date in yyyy-mm-dd format             | STRING
 
 # COMMAND ----------
 
@@ -805,15 +811,16 @@ def get_timezone(AIRPORT):
 early_threshold = 4
 late_threshold = 1
 
-tz_airlines_df = clean_airlines_df \
+join_airlines_df = clean_airlines_df \
     .withColumn("ORIGIN_TIMEZONE", get_timezone(F.col("ORIGIN"))) \
     .withColumn("UNIX_CRS_DEP_TIME_UTC", format_unix_column("CRS_DEP_TIME", "ORIGIN_TIMEZONE")) \
     .withColumn('EARLY_LIMIT', F.col("UNIX_CRS_DEP_TIME_UTC") - (early_threshold*3600)) \
-    .withColumn('LATE_LIMIT', F.col("UNIX_CRS_DEP_TIME_UTC") + (late_threshold*3600))
+    .withColumn('LATE_LIMIT', F.col("UNIX_CRS_DEP_TIME_UTC") + (late_threshold*3600)) \
+    .withColumn('FL_DATE', format_date_column())
 
-# Format weather date to [yyyy-MM-dd HH:mm:ss]
-tz_weather_df = clean_weather_df.withColumn('DATE', F.regexp_replace('DATE', 'T', ' ')) \
-    .withColumn("unix_weather_time", F.unix_timestamp(F.col("DATE"),"yyyy-MM-dd HH:mm:ss"))
+join_weather_df = clean_weather_df.withColumn('DATE', F.regexp_replace('DATE', 'T', ' ')) \
+    .withColumn("UNIX_WEATHER_TIME", F.unix_timestamp(F.col("DATE"),"yyyy-MM-dd HH:mm:ss")) \
+    .withColumn('FL_DATE', F.split(F.col('DATE'), ' ').getItem(0))
 
 # COMMAND ----------
 
@@ -831,8 +838,8 @@ tz_weather_df = clean_weather_df.withColumn('DATE', F.regexp_replace('DATE', 'T'
 # COMMAND ----------
 
 # DBTITLE 1,See number of delayed and non-delayed flights
-dep_del15_0_ct = tz_airlines_df.filter(F.col("DEP_DEL15")==0).count()
-dep_del15_1_ct = tz_airlines_df.filter(F.col("DEP_DEL15")==1).count()
+dep_del15_0_ct = join_airlines_df.filter(F.col("DEP_DEL15")==0).count()
+dep_del15_1_ct = join_airlines_df.filter(F.col("DEP_DEL15")==1).count()
 fraction = dep_del15_1_ct / dep_del15_0_ct
 
 print(f"Number of Non-Delayed Flights: {dep_del15_0_ct}")
@@ -842,8 +849,8 @@ print(f"Ratio of Delayed to Non-Delayed Flights: {fraction}")
 # COMMAND ----------
 
 # DBTITLE 1,Balance Data
-new_dep_del15_0 = tz_airlines_df.filter(F.col("DEP_DEL15")==0).sample(False, fraction)
-old_dep_del15_1 = tz_airlines_df.filter(F.col("DEP_DEL15")==1)
+new_dep_del15_0 = join_airlines_df.filter(F.col("DEP_DEL15")==0).sample(False, fraction)
+old_dep_del15_1 = join_airlines_df.filter(F.col("DEP_DEL15")==1)
 balanced_airlines_df = new_dep_del15_0.union(old_dep_del15_1)
 
 print(f"New number of Non-Delayed Flights: {new_dep_del15_0.count()}")
@@ -858,19 +865,82 @@ print(f"Total number of flights: {balanced_airlines_df.count()}")
 # MAGIC - TODO: Edit join diagram
 # MAGIC - TODO: Add time it took to join
 # MAGIC 
-# MAGIC We took a two-pronged approach to joining the dataframes. We started by joining the ORIGIN feature from the Airlines dataframe with the airport_id column from the Stations dataframe as well as the ORIGIN_STATE_ABR feature from the Airlines dataframe with neighbor_state from the Stations dataframe. Next, we joined the FL_DATE feature from the Airlines and Stations dataframes with the _date column from the weather dataframe. Finally, we joined the station_id column from the Airlines and Stations dataframe with the STATION column from the weather dataframe. We show a diagram of our two-tiered join strategy below.
+# MAGIC We took a two-pronged approach to joining the dataframes. We started by joining the ORIGIN feature from the Airlines dataframe with the airport_id column from the Stations dataframe as well as the ORIGIN_STATE_ABR feature from the Airlines dataframe with neighbor_state from the Stations dataframe.
+
+# COMMAND ----------
+
+join_df1 = balanced_airlines_df.join(
+    join_stations_df,
+    (balanced_airlines_df.ORIGIN == join_stations_df.neighbor_call) & \
+    (balanced_airlines_df.ORIGIN_STATE_ABR == join_stations_df.neighbor_state)
+)
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ##### Drop select columns
+# MAGIC Next, we joined the stations and date feature from the Airlines and Stations dataframes. We also wanted to focus on weather data within the timeframe of 4 hours before the flight and 1 hour after the flight.
+
+# COMMAND ----------
+
+join_df2 = join_df1.join(
+    join_weather_df,
+    (join_df1.station_id == join_weather_df.STATION) & \
+    (join_df1.FL_DATE == join_weather_df.FL_DATE),
+    "left"
+).filter(
+    (join_weather_df.UNIX_WEATHER_TIME <= join_df1.LATE_LIMIT) &
+    (join_weather_df.UNIX_WEATHER_TIME >= join_df1.EARLY_LIMIT)
+)
+
+# COMMAND ----------
+
+display(join_df2)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC A diagram of our two-tiered join strategy is shown below.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Drop and Rename Fields
 # MAGIC 
-# MAGIC After joining the tables, we can drop some of the keys that are no longer relevant such as join keys and highly correlated fields.
+# MAGIC After joining the tables, we can drop some of the keys that are no longer relevant such as join keys and highly correlated fields. We also added an additional field called `WEATHER_DEP_DIFF_TIME` which is the amount of time between the flight departure time and the weather reading time. If the time difference is negative, then the weather reading time occurred after the flight departure
+
+# COMMAND ----------
+
+final_df = join_df2.withColumn(
+    'WEATHER_DEP_DIFF_TIME', 
+    F.col('UNIX_CRS_DEP_TIME_UTC') - F.col('UNIX_WEATHER_TIME')
+).select(
+    F.col('DEP_DEL15'),
+    F.col('UNIX_WEATHER_TIME'),
+    F.col('WEATHER_DEP_DIFF_TIME'),
+    F.col('LATITUDE'),
+    F.col('LONGITUDE'),
+    F.col('ELEVATION'),
+    F.col('HourlyAltimeterSetting').alias("HOURLY_ALTIMETER_SETTING"),
+    F.col('HourlyDewPointTemperature').alias("HOURLY_DEW_POINT_TEMP"),
+    F.col('HourlyDryBulbTemperature').alias('HOURLY_DRY_BULB_TEMP'),
+    F.col('HourlyRelativeHumidity').alias('HOURLY_RELATIVE_HUMIDITY'),
+    F.col('HourlyStationPressure').alias('HOURLY_STATION_PRESSURE'),
+    F.col('HourlyVisibility').alias('HOURLY_VISIBILITY'),
+    F.col('HourlyWetBulbTemperature').alias('HOURLY_WET_BULB_TEMP'),
+    F.col('HourlyWindDirection').alias('HOURLY_WIND_DIRECTION'),
+    F.col('HourlyWindSpeed').alias('HOURLY_WIND_SPEED'),
+    F.col('REPORT_TYPE'),
+    F.col('SOURCE')
+)
+
+# COMMAND ----------
+
+display(final_df)
 
 # COMMAND ----------
 
 # DBTITLE 1,Write to blob storage
-
+final_df.write.mode("overwrite").parquet(f"{blob_url}/final_df_6")
 
 # COMMAND ----------
 
@@ -882,6 +952,11 @@ print(f"Total number of flights: {balanced_airlines_df.count()}")
 # MAGIC %md
 # MAGIC #### Summary Statistic
 # MAGIC - TODO: Row and column count
+# MAGIC - TODO: Data Profile
+
+# COMMAND ----------
+
+dbutils.data.summarize(final_df)
 
 # COMMAND ----------
 
