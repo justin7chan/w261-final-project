@@ -87,7 +87,7 @@ spark.conf.set(f"fs.azure.sas.{blob_container}.{storage_account}.blob.core.windo
 clean_airlines_df = spark.read.parquet(f"{blob_url}/clean_airlines_1")
 clean_stations_df = spark.read.parquet(f"{blob_url}/clean_stations_1")
 clean_weather_df = spark.read.parquet(f"{blob_url}/clean_weather_2")
-final_df = spark.read.parquet(f"{blob_url}/final_df_6")
+final_df = spark.read.parquet(f"{blob_url}/final_df_7")
 
 # COMMAND ----------
 
@@ -457,14 +457,16 @@ def plot_correlation_matrix(df, method='pearson', title="Correlation Matrix"):
     # Drops string columns
     string_cols = [c for c in df.columns if (df.schema[c].dataType == T.StringType())]
     pipeline = Pipeline(stages=indexers)
-    factorized_df = pipeline.fit(clean_airlines_df).transform(clean_airlines_df).drop(*string_cols)
+    factorized_df = pipeline.fit(df).transform(df).drop(*string_cols)
 
+    # Calculates correlation matrix
     factorized_rdd = factorized_df.rdd.map(lambda row: row[0:])
     corr_mat = Statistics.corr(factorized_rdd, method=method)
     corr_mat_df = pd.DataFrame(corr_mat,
                     columns=factorized_df.columns, 
                     index=factorized_df.columns)
     
+    # Plot correlation matrix in seaborn
     plt.subplots(figsize=(10,10))  
     plt.title(title)
     ax = sns.heatmap(
@@ -832,44 +834,12 @@ join_weather_df = clean_weather_df.withColumn('DATE', F.regexp_replace('DATE', '
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ##### Data Imbalance
-# MAGIC Due to the volume of data, a sampling technique has to be implemented to reduce bias. We sampled an equal number of airlines with departure delay times over 15 minutes and under 15 minutes. This will minimize data set imbalance and allow an equal number of false positives, false negatives, true positives, and true negatives. Although we will lose a lot of valuable data, it will give us more consistent results and speed up our training process. We can use accuracy as an evaluation metric instead of precision or recall.
-
-# COMMAND ----------
-
-# DBTITLE 1,See number of delayed and non-delayed flights
-dep_del15_0_ct = join_airlines_df.filter(F.col("DEP_DEL15")==0).count()
-dep_del15_1_ct = join_airlines_df.filter(F.col("DEP_DEL15")==1).count()
-fraction = dep_del15_1_ct / dep_del15_0_ct
-
-print(f"Number of Non-Delayed Flights: {dep_del15_0_ct}")
-print(f"Number of Delayed Flights: {dep_del15_1_ct}")
-print(f"Ratio of Delayed to Non-Delayed Flights: {fraction}")
-
-# COMMAND ----------
-
-# DBTITLE 1,Balance Data
-new_dep_del15_0 = join_airlines_df.filter(F.col("DEP_DEL15")==0).sample(False, fraction)
-old_dep_del15_1 = join_airlines_df.filter(F.col("DEP_DEL15")==1)
-balanced_airlines_df = new_dep_del15_0.union(old_dep_del15_1)
-
-print(f"New number of Non-Delayed Flights: {new_dep_del15_0.count()}")
-print(f"New number of Delayed Flights: {old_dep_del15_1.count()}")
-print(f"Total number of flights: {balanced_airlines_df.count()}")
-
-# COMMAND ----------
-
-# MAGIC %md
 # MAGIC #### Join Process
-# MAGIC - TODO: Edit paragraph
-# MAGIC - TODO: Edit join diagram
-# MAGIC - TODO: Add time it took to join
-# MAGIC 
 # MAGIC We took a two-pronged approach to joining the dataframes. We started by joining the ORIGIN feature from the Airlines dataframe with the airport_id column from the Stations dataframe as well as the ORIGIN_STATE_ABR feature from the Airlines dataframe with neighbor_state from the Stations dataframe.
 
 # COMMAND ----------
 
-join_df1 = balanced_airlines_df.join(
+join_df1 = join_airlines_df.join(
     join_stations_df,
     (balanced_airlines_df.ORIGIN == join_stations_df.neighbor_call) & \
     (balanced_airlines_df.ORIGIN_STATE_ABR == join_stations_df.neighbor_state)
@@ -894,12 +864,13 @@ join_df2 = join_df1.join(
 
 # COMMAND ----------
 
-display(join_df2)
+# MAGIC %md
+# MAGIC A diagram of our two-tiered join strategy is shown below.
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC A diagram of our two-tiered join strategy is shown below.
+# MAGIC <img src="https://raw.githubusercontent.com/sysung/w261-final-project/master/data_joins.png" width=50%>
 
 # COMMAND ----------
 
@@ -939,8 +910,13 @@ display(final_df)
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC Altogether, the join took around 4.36 minutes to display and 8.31 minutes to write to blob storage on four 4-core 16-gb worker nodes. 
+
+# COMMAND ----------
+
 # DBTITLE 1,Write to blob storage
-final_df.write.mode("overwrite").parquet(f"{blob_url}/final_df_6")
+final_df.write.mode("overwrite").parquet(f"{blob_url}/final_df_7")
 
 # COMMAND ----------
 
@@ -951,28 +927,32 @@ final_df.write.mode("overwrite").parquet(f"{blob_url}/final_df_6")
 
 # MAGIC %md
 # MAGIC #### Summary Statistic
-# MAGIC - TODO: Row and column count
-# MAGIC - TODO: Data Profile
+# MAGIC We analyzed the final dataframe and saw that there were 208,066,549 rows and 17 columns with no missing data, so our dataset is clean. We also saw that there was a huge imbalance in data where there were more non-delayed flights than there are delayed flights. Therefore, we want to calculate the precision since we want to ensure that the we maximize the probability that we identified a delayed flight correctly.
 
 # COMMAND ----------
 
-dbutils.data.summarize(final_df)
+print(f"Final Dataframe Row Count: {final_df.count()}")
+print(f"Final Datafrmae Column Count: {len(final_df.columns)}")
+
+# COMMAND ----------
+
+print(f'Number of Non-delayed Flights: {final_df.filter(F.col("DEP_DEL15")==0).count()}')
+print(f'Number of Delayed Flights {final_df.filter(F.col("DEP_DEL15")==1).count()}')
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC #### Correlation Matrix
+# MAGIC 
+# MAGIC We also ran a correlation matrix on our final dataframe to better understand the underlying relationships between the various features. The correlation matrix was run on a subset of data since the full dataset was too large and often caused the cluster to crash. We hope that by sampling the dataset to a certain degree, we can keep the integrity of the distribution and not affect the pearson's correlation coefficient by too much while increasing the process speed.
+# MAGIC 
+# MAGIC The output made sense logically, given that the `HOURLY_STATION_PRESSURE` was negatively correlated to the `ELEVATION`. One would expect the hourly station pressure to drop when elevation rises. Conversely, the `HOURLY_WET_BULB_TEMP` and `HOURLY_DRY_BULB_TEMP` were positively correlated; this also made good sense. The dry bulb temperature is the ambient air temperature that is measured by regular thermometers, while the wet bulb temperature is measured by thermometers that are wrapped in wetted wicks. The dry and wet bulb temperatures are empirically similar under relative humidity conditions.
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC #### Input vs Output Variable
-
-# COMMAND ----------
-
-# pair_plot_lat_dep_del = sample_final_df.pandas_api().pivot(columns='DEP_DEL15', values='HOURLY_WIND_SPEED')
-# pair_plot_lat_dep_del.plot.hist(bins=50, figsize=(6,6), alpha=0.7)  
-# pair_plot_lat_dep_del.title("Hourly Wind Speed and Departure Delay Past 15 Minutes")
+sample_final_df = final_df.sample(False, 0.01)
+print(f"Sample Size: {sample_final_df.count()}")
+_ = plot_correlation_matrix(sample_final_df, title="Final Dataframe Correlation Matrix")
 
 # COMMAND ----------
 
@@ -1052,9 +1032,9 @@ dbutils.data.summarize(final_df)
 # MAGIC 
 # MAGIC | Task | Estimated Improvement | Hours Spent | Start Date | End Date | Team Member
 # MAGIC | ---- | --------------------- | ----------- | ---------- | -------- | ----------- |
-# MAGIC | Migrate Google Doc to Jupyter Notebook           | 0 | 24 | 11/19 | 11/22 | Steven Sung |
-# MAGIC | Clean weather data by removing extra nulls       | 0 | 3  | 11/20 | 11/20 | Steven Sung |
-# MAGIC | Added COVID flight restriction binary variable   |   |    |       |       | Steven Sung |
+# MAGIC | Migrate Introduction from Google Doc to Jupyter Notebook           | 0 | 24 | 11/19 | 11/22 | Steven Sung |
+# MAGIC | Added COVID flight restriction binary variable                     |   |    |       |       | Steven Sung |
+# MAGIC | Change metric from accuracy to precicion                           |   | 2  | 11/21 | 11/21 | Steven Sung |
 
 # COMMAND ----------
 
