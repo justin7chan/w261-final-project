@@ -115,6 +115,8 @@ final_df = spark.read.parquet(f"{blob_url}/final_df_9")
 # MAGIC > - No metrics were given. No business was really given. What perspective is the team going to take within the given problem?
 # MAGIC > - No mention of the data join. No mention of metrics.
 # MAGIC 
+# MAGIC We have been tasked by the FAA to set new flight regulations based on hazardous weather conditions. More specifically, what type of weather conditions will create flight delays longer than 15 minutes. Datasets provided by the US DoT and NOAA contain information about airlines, weather, and stations where we'll perform EDA, clean the records, and join them based on UNIX timestamp. **<Talk about feature engineering, hyperparameters>**. The baseline models include logistic regression and deceision tree models which had a 47.94% and 62.61% accuracy respectively. **< Change to reflect current models (recall as main metric) >** Our next step is to create additional models that utilize XGBoost, SMOTE, and ensemble methods to improve our recall score.
+# MAGIC 
 # MAGIC The focus of this project is to build a predictive analysis for predicting delays from weather data
 # MAGIC for US-bound and departing flights to avoid economic losses and passenger inconvenience. We
 # MAGIC used a logistic model to predict if a flight will take off 15 minutes or later from the respective
@@ -141,7 +143,7 @@ final_df = spark.read.parquet(f"{blob_url}/final_df_9")
 # MAGIC %md
 # MAGIC ### Problem
 # MAGIC 
-# MAGIC We have been tasked by the FAA to set new flight regulations based on hazardous weather conditions. Dangerous weather can risk the health of many passengers and employees. We aim to create new standards by observing flight delays impacted by weather. More specifically, what type of weather conditions will create flight delays longer than 15 minutes. If flights are cancelled or delayed due to severe and hazardous weather like rainstorms, floods, or blizzards, it can decrease our customer satisfaction, revenue, and long term economic growth. By decreasing delays, airlines can send out more flights at approriate times to increase their revenue and decrease flight fatalities.
+# MAGIC We have been tasked by the FAA to set new flight regulations based on hazardous weather conditions. Dangerous weather can risk the health of many passengers and employees. One of the flight regulations we aim to change how flight delays are defined. There are many influences that can delay a flight such as National Air Systems and late arrival, but we want to look at just weather data. More specifically, what type of weather conditions will create flight delays longer than 15 minutes. If flights are cancelled or delayed due to severe and hazardous weather like rainstorms, floods, or blizzards, it can decrease our customer satisfaction, revenue, and long term economic growth. By decreasing delays, airlines can send out more flights at approriate times to increase their revenue and decrease flight fatalities.
 # MAGIC 
 # MAGIC To solve this problem, we plan to understand the correlation between weather and flight delays using machine learning models. We define a flight delay as a any flight departing 15 minutes later than expected scheduled departure time. Data on severe weather such as tornados, heavy winds, and floods is captured by stations, where we can correlate this data with air flight delays.
 
@@ -180,7 +182,7 @@ final_df = spark.read.parquet(f"{blob_url}/final_df_9")
 # MAGIC %md
 # MAGIC ##### Data Description
 # MAGIC 
-# MAGIC The airline dataset containing flights from 2015 to 2021 inclusive has 74,177,433 total rows and 109 fields of data. Each row corresponds to an individual flight within the United States. Looking at their database dictionary from the [Bureau of Transportation Statistics](https://www.transtats.bts.gov/Fields.asp?gnoyr_VQ=FGJ), we can delve into each feature family and how it relates to our problem statement.
+# MAGIC The airline dataset containing flights from 2015 to 2021 inclusive has 74,177,433 total rows and 109 fields of data. Each row corresponds to an individual flight within the United States. Looking at their database dictionary from the [Bureau of Transportation Statistics](https://www.transtats.bts.gov/Fields.asp?gnoyr_VQ=FGJ) under the US Department of Transportation, we can delve into each feature family and how it relates to our problem statement.
 # MAGIC 
 # MAGIC ###### Time Period
 # MAGIC Time Period contains all of the information related to the flights time like Year, Quarter, Month, Day of Month, Day of Week, and Flight Date. This will be used as our join key with the weather dataset so that we can get weather information surrounding flight departure.
@@ -214,14 +216,14 @@ print(f"Raw Airlines Column Count: {len(raw_airlines_df.columns)}")
 
 # COMMAND ----------
 
+
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ##### Null Counts
 # MAGIC 
 # MAGIC The first form of EDA that we did was look for null counts in the raw data set. Raw data usually contains nulls from either human error or by logic, for example, if the field is not applicable to the flight. The histogram is sorted by the indices that the column appears in the raw table. We've removed all columns which have no nulls so that we can see which field has the highest null counts. 
-
-# COMMAND ----------
-
-
 
 # COMMAND ----------
 
@@ -243,7 +245,7 @@ null_df = spark.createDataFrame(null_rdd).toDF(*colnames)
 
 # COMMAND ----------
 
-# DBTITLE 1,Plot histogram of non-zero null counts
+# DBTITLE 0,Plot histogram of non-zero null counts
 null_pd = null_df.filter(F.col("nonzero_nulls") > 0).pandas_api().to_pandas()
 
 chart = sns.catplot(y="nonzero_nulls", x="fields", kind="bar", data=null_pd, color="blue", height=5, aspect=15/5)
@@ -616,6 +618,16 @@ display(raw_stations_df.filter(F.col('neighbor_id')==6900209321869002093218))
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC The raw dataset contains 5,004,169 rows and 12 columns, so we can expect multiple duplicate stations.
+
+# COMMAND ----------
+
+print(f"Raw Stations Row Count: {raw_stations_df.count()}")
+print(f"Raw Stations Column Count: {len(raw_stations_df.columns)}")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ##### Station Distance to Neighbor
 # MAGIC Within this dataframe, logically, we found that the station’s `distance_to_neighbor` would be the most important feature to clean our dataset, given that the closer a station is to an airport in proximity, the higher likelihood that the weather forecast/data is accurate. Since incremental weather chagnes can impact flight delays, we decided to run a groupBy on states and measure each station’s average distance to neighbor, expecting more remote states to be farther away from stations. The chart below shows the output. 
 
@@ -838,7 +850,12 @@ clean_weather_df.write.mode("overwrite").parquet(f"{blob_url}/clean_weather_2")
 # MAGIC %md
 # MAGIC ### Join
 # MAGIC 
-# MAGIC To train our model with the data, we require to join all of the tables which are airlines, stations, and weather.
+# MAGIC To train our model with the data, we require to join all of the tables which are airlines, stations, and weather. Since doing a full join on all of the data would create an extremely large dataset, we decided to look at a timeframe of a flight and see if we could model after it. Our hypothesis is that by forecasting weather patterns that we can justify whether or not a flight should be cancelled. We use a timefrime of 4 hours prior and 1 hour after departure as arbitrary values. If required, we will extend the window to allow for more values.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC <img src="https://github.com/sysung/w261-final-project/blob/master/full_workflow_pipeline-Page-3.drawio.png?raw=true" width=50%/>
 
 # COMMAND ----------
 
@@ -1031,7 +1048,7 @@ final_df.write.mode("overwrite").parquet(f"{blob_url}/final_df_9")
 
 # MAGIC %md
 # MAGIC #### Summary Statistic
-# MAGIC We analyzed the final dataframe and saw that there were 208,066,549 rows and 17 columns with no missing data, so our dataset is clean. We also saw that there was a huge imbalance in data where there were more non-delayed flights than there are delayed flights. Therefore, we want to calculate the precision since we want to ensure that the we maximize the probability that we identified a delayed flight correctly.
+# MAGIC We analyzed the final dataframe and saw that there were 208,066,549 rows and 17 columns with no missing data, so our dataset is clean. We also saw that there was a huge imbalance in data where there were more non-delayed flights than there are delayed flights. Therefore, we want to calculate the recall since we want to ensure that the we maximize the probability that we identified a delayed flight correctly.
 
 # COMMAND ----------
 
@@ -1050,7 +1067,9 @@ print(f'Number of Delayed Flights {final_df.filter(F.col("DEP_DEL15")==1).count(
 # MAGIC 
 # MAGIC We also ran a correlation matrix on our final dataframe to better understand the underlying relationships between the various features. The correlation matrix was run on a subset of data since the full dataset was too large and often caused the cluster to crash. We hope that by sampling the dataset to a certain degree, we can keep the integrity of the distribution and not affect the pearson's correlation coefficient by too much while increasing the process speed.
 # MAGIC 
-# MAGIC The output made sense logically, given that the `HOURLY_STATION_PRESSURE` was negatively correlated to the `ELEVATION`. One would expect the hourly station pressure to drop when elevation rises. Conversely, the `HOURLY_WET_BULB_TEMP` and `HOURLY_DRY_BULB_TEMP` were positively correlated; this also made good sense. The dry bulb temperature is the ambient air temperature that is measured by regular thermometers, while the wet bulb temperature is measured by thermometers that are wrapped in wetted wicks. The dry and wet bulb temperatures are empirically similar under relative humidity conditions.
+# MAGIC The output made sense logically, given that the `HOURLY_STATION_PRESSURE` was negatively correlated to the `ELEVATION`. One would expect the hourly station pressure to drop when elevation rises. Conversely, `HOURLY_WET_BULB_TEMP`, `HOURLY_DRY_BULB_TEMP` and `HOURLY_DEW_POINT_TEMP` were all positively correlated. The dry bulb temperature is the ambient air temperature that is measured by regular thermometers, while the wet bulb temperature is measured by thermometers that are wrapped in wetted wicks. The dry and wet bulb temperatures are empirically similar under relative humidity conditions.
+# MAGIC 
+# MAGIC We also see that `UNIX_WEATHER_TIME` and `UNIX_CRS_DEP_TIME_UTC` have high correlation. Since these numbers are large as UNIX timestamps, we expect the differences between the two fields to be minimal. When training our model we should do feature engineering to normalize these values or convert them back to date timestamps.
 
 # COMMAND ----------
 
@@ -1062,6 +1081,30 @@ _ = plot_correlation_matrix(sample_final_df, title="Final Dataframe Correlation 
 
 # MAGIC %md
 # MAGIC ## Model
+# MAGIC 
+# MAGIC In this section, we will be discussing our modeling process including the different featured that were added and model pipelines. Our dataset contains classified data, so we can use supervised learning models to train on our data.
+# MAGIC 
+# MAGIC As our main metric, we noticed that there was a major imbalance of data. Of the 208,066,549 weather readings from flights, 172,093,071 were listed as no delay where as 35,973,478 were delays. Note that each record is a unique flight, rather contain a timeframe within a specific flight.
+
+# COMMAND ----------
+
+display(final_df.groupBy('DEP_DEL15').count())
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Due to this imbalanced nature, we could not use accuracy since it relies on a balanced data set. Precision measures how many flights were correctly predicted as delayed over the true number of delayed flights, whereas recall measures the number of correctly predicted delayed flights over all positive cases for both delay and non-delayed flights. Specificity measures how many non delayed predictions were correct and F1-Score combines both precisino and recall.
+# MAGIC 
+# MAGIC We aim to minimize false negatives, so flights that predicted to not be delayed but are actually delayed. This is because if we misinterpret a flight as being on time but is actually late, there is a lot of economic loss for us. On the other hand, if we predict a flight to be late but is actually on time, it may actully increase customer satisfaction knowing that their flight has arrived earlier than expected. 
+# MAGIC 
+# MAGIC Therefore, we will use recall as our main metric, but will also list precision and F1 score for curiosity sake.
+# MAGIC 
+# MAGIC <script
+# MAGIC   src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"
+# MAGIC   type="text/javascript">
+# MAGIC </script>
+# MAGIC 
+# MAGIC $$Recall = \frac{TP}{TP+FN} $$
 
 # COMMAND ----------
 
@@ -1181,12 +1224,14 @@ _ = plot_correlation_matrix(sample_final_df, title="Final Dataframe Correlation 
 # MAGIC | Add list of tasks to do for Phase 3                                | 0 | 0.5 | 11/18 | 11/18 | Steven Sung |
 # MAGIC | Migrate Introduction from Google Doc to Jupyter Notebook           | 0 | 2  | 11/19 | 11/19 | Steven Sung |
 # MAGIC | Combine all 5 Jupyter Notebooks into Phase 3 Master Notebook       | 0 | 24 | 11/19 | 11/21 | Steven Sung |
-# MAGIC | Remove data balancing                                              |   | 0.25| 11/21 | 11/21 | Steven Sung |
+# MAGIC | Remove data balancing. Use Precision as main metric                |   | 0.25| 11/21 | 11/21 | Steven Sung |
+# MAGIC | Rewrote "Abstract" section based on feedback                       | 0 | 1  | 11/22 | 11/22 | Steven Sung |
 # MAGIC | Rewrote "Problem" section under "Introduction" based on feedback   | 0 | 1  | 11/22 | 11/22 | Steven Sung |
 # MAGIC | Rewrote "Datasets" section under "Introduction" based on feedback  | 0 | 1  | 11/22 | 11/22 | Steven Sung |
 # MAGIC | Add dataset workflow diagram from raw to clean                     | 0 | 0.5 | 11/22 | 11/22 | Steven Sung |
 # MAGIC | Rewrote "Airlines" section under "Dataset" based on feedback       | 0 | 3  | 11/22 | 11/22 | Steven Sung |
 # MAGIC | Rewrote "Stations" section under "Dataset" based on feedback       | 0 | 2  | 11/22 | 11/22 | Steven Sung |
+# MAGIC | Migrate and rewrote "Model" section based on feedback              | 0 | 7  | 11/23 | 11/23 | Steven Sung |
 # MAGIC | Changed join diagram                                               | 0 | 1  | 11/22 | 11/22 | Justin Chan |
 
 # COMMAND ----------
