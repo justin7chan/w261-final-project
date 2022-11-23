@@ -23,6 +23,9 @@
 # MAGIC >   - Conclusion and next steps
 # MAGIC >   - Open issues or problems
 # MAGIC > - NOTE: Did each section in your notebook from abstract to conclusions, and each slide in your presentation address the new features you engineered?
+# MAGIC 
+# MAGIC > Feedback from previous phases
+# MAGIC > - Narrow down the project description to more of a business case. Are you taking the side of the airline or the customer. Not entirely clear from video. Don't use accuracy. Video just suddenly cuts out.
 
 # COMMAND ----------
 
@@ -43,7 +46,12 @@
 # MAGIC ##An Algorithmic Approach to Predicting Flight Delays
 # MAGIC ###Section 3 Group 2 | Ramki Gummadi
 # MAGIC ###Job Bangayan, Justin Chan, Matthew Rubino, Steven Sung
-# MAGIC #####Phase Leader: Matthew Rubino
+# MAGIC #####Phase Leader: Steven Sung
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC **Run the cells below to obtain information about Azure blob storage and dataframes**
 
 # COMMAND ----------
 
@@ -87,7 +95,7 @@ spark.conf.set(f"fs.azure.sas.{blob_container}.{storage_account}.blob.core.windo
 clean_airlines_df = spark.read.parquet(f"{blob_url}/clean_airlines_1")
 clean_stations_df = spark.read.parquet(f"{blob_url}/clean_stations_1")
 clean_weather_df = spark.read.parquet(f"{blob_url}/clean_weather_2")
-final_df = spark.read.parquet(f"{blob_url}/final_df_7")
+final_df = spark.read.parquet(f"{blob_url}/final_df_9")
 
 # COMMAND ----------
 
@@ -103,6 +111,10 @@ final_df = spark.read.parquet(f"{blob_url}/final_df_7")
 # MAGIC > - **Next steps**
 # MAGIC > - **Any problems**
 # MAGIC 
+# MAGIC > Feedback from previous phases
+# MAGIC > - No metrics were given. No business was really given. What perspective is the team going to take within the given problem?
+# MAGIC > - No mention of the data join. No mention of metrics.
+# MAGIC 
 # MAGIC The focus of this project is to build a predictive analysis for predicting delays from weather data
 # MAGIC for US-bound and departing flights to avoid economic losses and passenger inconvenience. We
 # MAGIC used a logistic model to predict if a flight will take off 15 minutes or later from the respective
@@ -117,32 +129,82 @@ final_df = spark.read.parquet(f"{blob_url}/final_df_7")
 # MAGIC 
 # MAGIC > Project Description
 # MAGIC > - Data description
-# MAGIC > - **Task to be tackled**
+# MAGIC > - Task to be tackled
 # MAGIC > - **Provide diagrams to aid understanding the workflow**
 # MAGIC 
-# MAGIC According to the U.S. Bureau of Transportation Statistics, over the last 10 years, on average 18.74% of scheduled flights are delayed by 15 minutes or more per year, with 2022 representing the highest percentage (21.16%) of flights delayed since 2014. Delays represent a significant headache for both travelers and airlines alike. Researchers from the University of California Berkeley commissioned by the Federal Aviation Administration found that domestic flight delays cost the U.S. economy $32.9bn, with about half of the cost borne by airline passengers and the balance borne by airline operators. Today, flight delays remain a widespread issue that places a significant burden on airlines, travelers, and the broader economy at large.
+# MAGIC **Rewrite**
+# MAGIC 
+# MAGIC According to the U.S. Bureau of Transportation Statistics, over the last 10 years, on average 18.74% of scheduled flights are delayed by 15 minutes or more per year, with 2022 representing the highest percentage (21.16%) of flights delayed since 2014. Delays represent a significant headache for both travelers and airlines alike. Researchers from the University of California Berkeley commissioned by the Federal Aviation Administration (FAA) found that domestic flight delays cost the U.S. economy $32.9 billions, with about half of the cost borne by airline passengers and the balance borne by airline operators. Today, flight delays remain a widespread issue that places a significant burden on airlines, travelers, and the broader economy at large.
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ### Problem
 # MAGIC 
-# MAGIC The problem is to predict flight delays for US-bound and departing flights using weather data to avoid economic losses for airlines and to reduce passenger inconvenience. We define a flight delay as a any flight departing 15 minutes later than expected scheduled departure time. Data on severe weather such as tornados, heavy winds, and floods is captured in weather stations, where we can correlate this data with air flight delays.
+# MAGIC We have been tasked by the FAA to set new flight regulations based on hazardous weather conditions. Dangerous weather can risk the health of many passengers and employees. We aim to create new standards by observing flight delays impacted by weather. More specifically, what type of weather conditions will create flight delays longer than 15 minutes. If flights are cancelled or delayed due to severe and hazardous weather like rainstorms, floods, or blizzards, it can decrease our customer satisfaction, revenue, and long term economic growth. By decreasing delays, airlines can send out more flights at approriate times to increase their revenue and decrease flight fatalities.
+# MAGIC 
+# MAGIC To solve this problem, we plan to understand the correlation between weather and flight delays using machine learning models. We define a flight delay as a any flight departing 15 minutes later than expected scheduled departure time. Data on severe weather such as tornados, heavy winds, and floods is captured in weather stations, where we can correlate this data with air flight delays.
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ### Datasets
 # MAGIC 
-# MAGIC We will leverage three data sets including (i) flight data, (ii) weather data, and (iii) airport data. The data will be ingested from a Parquet file into Pandas data frames for ease of use and wrangling. The airlines data includes a subset of passenger flights' on-time performance data derived from the U.S Department of Transportation over the time window spanning 2015 to 2021 by quarter. Similarly, the weather data spans 2015 to 2021 and is derived from the National Oceanic and Atmospheric Administration repository. The stations dataset contains metadata about weather station location and airports nearest to it. 
+# MAGIC > Feedback from previous phase
+# MAGIC > - Data description could be more detailed. Not many data entries in the weather data. Difference between flight and airport data? Adding a diagram can help with the workflow. You discuss ways of handling missing values but never actually come to a conclusion.
+# MAGIC > - There is some inconsistency when you say the three different data frames are i) flight data, (ii) weather data, and (iii) airport data in the data description but then (i) airlines, (ii) stations, and (iii) weather in the EDA.
 # MAGIC 
-# MAGIC To gain a better understanding of the data, we will perform exploratory data analysis on the three main dataframes including the (i) airlines, (ii) stations, and (iii) weather dataframes. Additionally, we'll analyze our final joined dataframe, which combines these three dataframes into one master table.
+# MAGIC 
+# MAGIC > - Give a brief overview of each data set
+# MAGIC > - How will these datasets help us?
+# MAGIC > - What is our steps in a high overview.
+# MAGIC 
+# MAGIC We will leverage three data sets which are airline, weather, and station data. The airline and station dataset were retrieved from the [US Department of Transportation](https://www.transtats.bts.gov/homepage.asp) and the weather data was obtained by the [National Oceanic and Atmospheric Administration Repository](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C00679). We used these specific datasets since they were open source and contained a lot of recent information about flights and weather data. Since these datasets come from different data sources with no guarantees about data integrity, we must do our own exploratory data anlaysis on each table
+# MAGIC 
+# MAGIC The datasets were downloaded and converted into parquet files into Azure Blob Cloud Storage so that reading and writing the files over millions of records would be fast. When ready to analyze the data, we pulled the data from the cloud into PySpark dataframes through EDA like plots and histograms. Once we have a better understanding of each dataset, we will clean each dataframe based on null counts and create checkpoints for the celan dataframes so that they can be referenced later. A join on keys like date, time, and location will combine all three datasets into one master table which will be used to train our models as well as any additional EDA.
+# MAGIC 
+# MAGIC We will discuss more about the cleaning process of each dataset in detail in each of the subsections below. We also show a visual diagram below.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC <img src="https://github.com/sysung/w261-final-project/blob/master/full_workflow_pipeline.drawio%20(1).png?raw=true" width=90%>
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC #### Airlines
-# MAGIC The airline dataset containing flights from 2015 to 2021 inclusive has 74,177,433 total rows and 109 fields of data. Each row corresponds to an individual flight within the United States. Our response variable is `DEP_DEL15` which is a binary variable which states if a flight is delayed by more than 15 minutes or not. We can use this information to do some intial EDA to cut down the number of records by cleaning the dataframe.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Data Description
+# MAGIC 
+# MAGIC The airline dataset containing flights from 2015 to 2021 inclusive has 74,177,433 total rows and 109 fields of data. Each row corresponds to an individual flight within the United States. Looking at their database dictionary from the [Bureau of Transportation Statistics](https://www.transtats.bts.gov/Fields.asp?gnoyr_VQ=FGJ), we can delve into each feature family and how it relates to our problem statement.
+# MAGIC 
+# MAGIC ###### Time Period
+# MAGIC Time Period contains all of the information related to the flights time like Year, Quarter, Month, Day of Month, Day of Week, and Flight Date. This will be used as our join key with the weather dataset so that we can get weather information surrounding flight departure.
+# MAGIC 
+# MAGIC ###### Airline
+# MAGIC Airline containes information about the airline like unique carrier codes for the airline company, the flights coming in and out of airports, and tail numbers for specific planes. There are many codes used for an individual airline company where some of them are assigned by IATA while others are assigned by US DOT. Therefore, we picked the field `OP_UNIQUE_CARRIER` which is a unique identifier for a specific carrier.
+# MAGIC 
+# MAGIC ###### Origin and Destination
+# MAGIC The fields within Origin and Destination are very similar where they had information on the origin and destinatino airport like the ID, city, State, FIPS code, etc. Since we're only interested in departing flight delays, we'll mostly be looking at the Origin airport information
+# MAGIC 
+# MAGIC ###### Departure and Arrival Performance
+# MAGIC Departure and Arrival Performance has infromation about the flight status which includes minute details from wheels off, wheels on, taxi in, taxi, out, and delays. We'll be focusing on departure performance as this is our main motvie. More importantly it has a field called `DEP_DEL15` which is a binary variable that states if a flight is delayed by more than 15 minutes or not. This variable will be our main predictor variable.
+# MAGIC 
+# MAGIC ###### Cancellations and Diversions
+# MAGIC This section does not contain a lot of fields, but is somewhat relevant in flights. However, in our use case, cancellations and diversions occur during a flight of a specific tail number, not pre-flight information. Therefore, we can probably ignore this field.
+# MAGIC 
+# MAGIC ###### Cause of Delay
+# MAGIC The data dictionary lists multiple causes of delays such as carrier delay, weather delay, national air system delay, and others. While these may seem intriguing, some of these delays can be handled through human intervention. We can see how weather delays in minutes correlates with departure delays.
+# MAGIC 
+# MAGIC ###### Gate Return Information at Origin Airport
+# MAGIC The Gate Return Information at Origin Airport contains redundant information like departure time at origin airport and post-flight details which does not help solve our problem. We can safely ignore the fields under this feature family.
+# MAGIC 
+# MAGIC ###### Diverted Airport Information
+# MAGIC Diverted airport information pertains to only flights that have diverted. Flight that have diverted do not necessarily mean that they departed early or late. In conclusion, we can remove the fields pertaining to diverted airports.
 
 # COMMAND ----------
 
@@ -153,14 +215,9 @@ print(f"Raw Airlines Column Count: {len(raw_airlines_df.columns)}")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC We also took a look at a summarization of the raw dataset
-
-# COMMAND ----------
-
-# MAGIC %md
 # MAGIC ##### Null Counts
 # MAGIC 
-# MAGIC The first form of EDA that we did was look for null counts in the raw data set. The histogram is sorted by the indices that the column appears in the raw table. We've removed all columns which have no nulls so that we can see which field has the highest null counts. Upon further inspection of the data, most of the columns that have high null values are canceled or diverted flights.The high null values means that there are very few flights that were not enroute. This may be a good indicator of delayed flights, but with so many nulls, it would be safer to remove the columns.
+# MAGIC The first form of EDA that we did was look for null counts in the raw data set. Raw data usually contains nulls from either human error or by logic, for example, if the field is not applicable to the flight. The histogram is sorted by the indices that the column appears in the raw table. We've removed all columns which have no nulls so that we can see which field has the highest null counts. 
 
 # COMMAND ----------
 
@@ -177,6 +234,11 @@ null_df = spark.createDataFrame(null_rdd).toDF(*colnames)
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC Upon further inspection of the data, most of the columns that have high null values fall under the Cause of Delay and Diverted Airpot Information features. This is understandable as a high volume of null values means that there are very few flights that were not enroute.
+
+# COMMAND ----------
+
 # DBTITLE 1,Plot histogram of non-zero null counts
 null_pd = null_df.filter(F.col("nonzero_nulls") > 0).pandas_api().to_pandas()
 
@@ -189,16 +251,86 @@ plt.show()
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ##### Feature Selection
-# MAGIC To clean the data, we removed all of the columns that have an extremely high null value count. This will reduce our dimensions and remove the curse of dimensionality. There are also other features that were highly collinear to each other. There are a few exceptions in which we kept like airport information because it will be used to join on the different tables. In the final dataframe, it will be dropped.
-# MAGIC 
-# MAGIC For the columns that have some null values, we can easily fill some of the columns using basic arithmetics. We used `CRS_DEP_TIME` and `DEP_TIME` to calculate the `DEP_DELAY`, which is then used to calculate `DEP_DEL15` based on a simple condition statement if `DEP_DELAY` is greater than or equal to 15 or not.
-# MAGIC 
-# MAGIC If some rows still contained nulls, we removed the row altogether as it would only be a few rows lost.
+# MAGIC ##### Weather Delay
+# MAGIC In the airlines data, there is a column called `WEATHER_DELAY`. Since we are exploring how weather impact flights, this is an interesting column to dive into. For this EDA, will will format all `WEATHER_DELAY` values where if it's null or 0, it will turn to 0. Otherwise, it will be 1.
 
 # COMMAND ----------
 
-# DBTITLE 1,Drop columns
+weather_delay = raw_airlines_df.select(
+        'WEATHER_DELAY',
+        'DEP_DEL15'
+    ).withColumn(
+        'BIN_WEATHER_DELAY', F.when((F.col('WEATHER_DELAY').isNull()) | (F.col('WEATHER_DELAY')==0), 0).otherwise(1)
+    ).drop('WEATHER_DELAY')
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC At first glance in the table, we see that there are flights that delayed, but there is no weather delay. This means that the airline was delayed by something that wasn't weather.
+
+# COMMAND ----------
+
+display(weather_delay)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC We will count how many records were delayed by weather, delayed but not by weather, and not delayed at all. These will be the count of the variations of 0s and 1s between `WEATHER_DELAY` and `DEP_DEL15`. We will also count the scenario where `DEP_DEL15==0` and `BIN_WEATHER_DELAY==1`, but we expect this to be 0 because a flight cannot be on time while there is a weather delay.
+
+# COMMAND ----------
+
+no_delay = weather_delay.filter((F.col('DEP_DEL15') == 0) & (F.col('BIN_WEATHER_DELAY') == 0)).count()
+delay_not_by_weather = weather_delay.filter((F.col('DEP_DEL15') == 1) & (F.col('BIN_WEATHER_DELAY') == 0)).count()
+delay_by_weather = weather_delay.filter((F.col('DEP_DEL15') == 1) & (F.col('BIN_WEATHER_DELAY') == 1)).count() 
+impossible_scenario = weather_delay.filter((F.col('DEP_DEL15') == 0) & (F.col('BIN_WEATHER_DELAY') == 1)).count()
+
+print(f"No delayed flights: {no_delay}")
+print(f"Delay, but not by weather: {delay_not_by_weather}")
+print(f"Delay by weather: {delay_by_weather}")
+print(f"No delay, but weather delay (impossible): {impossible_scenario}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC We see that there are 59,955,343 flights that departed on time, 12,131,052 flights that were delayed but not by weather, and 681,827 flights that were delayed by weather. There were also 73,976 anomalous flights that fell under the impossible scenario of having no delay, but labeled as a flight delay.
+# MAGIC 
+# MAGIC Since we only want to include airlines that were either affected by weather delay or not delayed at all, we will keep rows where the condition `BIN_WEATHER_DELAY==1 & DEP_DEL15==1 ` and `BIN_WEATHER_DELAY==0 & DEP_DEL15==0`
+
+# COMMAND ----------
+
+weather_delay_airlines_df = raw_airlines_df.withColumn(
+        'BIN_WEATHER_DELAY', 
+        F.when((F.col('WEATHER_DELAY').isNull()) | (F.col('WEATHER_DELAY')==0), 0).otherwise(1)
+    ).filter(
+        ((F.col('BIN_WEATHER_DELAY')==1) & (F.col('DEP_DEL15')==1)) | \
+        ((F.col('BIN_WEATHER_DELAY')==0) & (F.col('DEP_DEL15')==0))
+    ).drop('BIN_WEATHER_DELAY')
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Our new airlines dataframe now contains 60,637,170 flights while keeping the same number of columns
+
+# COMMAND ----------
+
+print(f"New row count: {weather_delay_airlines_df.count()}")
+print(f"New column count: {len(weather_delay_airlines_df.columns)}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Feature Selection
+# MAGIC > - I like the example of how you filled in missing data but you need to include all instances, some columns are not as easy to fill in the missing data. 
+# MAGIC 
+# MAGIC To clean the data, we removed all of the columns that have an extremely high null value count. This will reduce our dimensions and remove the curse of dimensionality. There are a few exceptions in which we kept like airport information because it will be used to join on the different tables; in the final dataframe, it will be dropped.
+# MAGIC 
+# MAGIC From the subsetted features,  we can easily fill some of the columns using basic arithmetics for columns with null values. Since we are doing it on a smaller set of fields, we only need to calculate null values for a few fields and not all 109 fields. We used `CRS_DEP_TIME` and `DEP_TIME` to calculate the `DEP_DELAY`, which is then used to calculate `DEP_DEL15` based on a simple condition statement if `DEP_DELAY` is greater than or equal to 15 or not. If some rows still contained nulls, we removed the row altogether as it would only be a few rows lost.
+# MAGIC 
+# MAGIC We've also dropped columns that were collinear to the output variable. For example, `DEP_DELAY`, which is the amount of time delayed, and `WEATHER_DELAY`, which is the amount of time delayed by weather, are both dropped.
+
+# COMMAND ----------
+
+# DBTITLE 0,Drop columns
 subset_cols = [
     "YEAR",
     "QUARTER",
@@ -229,12 +361,11 @@ na_drop_cols = [
     "DEP_TIME"
 ]
 
-drop_cols_airlines_df = raw_airlines_df \
+ft_select_airlines_df = weather_delay_airlines_df \
     .select(subset_cols) \
     .na.drop(subset=na_drop_cols) \
     .withColumn("DEP_DEL15", F.when(F.col("DEP_DELAY") >= 15, 1).otherwise(0)) \
-    .withColumn("DEP_DELAY", F.col("DEP_TIME") - F.col("CRS_DEP_TIME")) \
-    .drop(F.col("DEP_TIME"))
+    .drop(*["DEP_TIME", "DEP_DELAY"])
 
 # COMMAND ----------
 
@@ -261,12 +392,12 @@ primary_keys = [
 # COMMAND ----------
 
 # DBTITLE 1,View duplicate flights
-display(drop_cols_airlines_df.select(primary_keys).groupBy(primary_keys).count().filter(F.col("count") > 0))
+display(ft_select_airlines_df.select(primary_keys).groupBy(primary_keys).count().filter(F.col("count") > 0))
 
 # COMMAND ----------
 
 # DBTITLE 1,Find an example of a duplicate flight
-example_dupe_flight = drop_cols_airlines_df \
+example_dupe_flight = ft_select_airlines_df \
     .filter(
         (F.col("YEAR")==2019) &
         (F.col("MONTH")==5) &
@@ -282,42 +413,19 @@ display(example_dupe_flight)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC We can see in this example that one of the flights has two of the same exact occurrences. To remedy this problem, we can retrieve only distinct records to remove duplicates.
+# MAGIC We can see in this example that one of the flights has two of the same exact occurrences. To remedy this problem, we can retrieve only distinct records to remove duplicates. After the cleaning process, there are no more duplicate flights in the dataset.
 
 # COMMAND ----------
 
-# DBTITLE 1,Drop duplicates
-prim_keys_airlines_df = drop_cols_airlines_df \
+# DBTITLE 0,Drop duplicates
+clean_airlines_df = ft_select_airlines_df \
     .na.drop(subset=primary_keys) \
     .distinct()
 
-dupe_flights = prim_keys_airlines_df.select(primary_keys).groupBy(primary_keys).count().filter(F.col("count") > 1)
-
 # COMMAND ----------
 
-display(dupe_flights)
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC After the deduping of the dataframe, we were still left with three anomalous records. Since it was a small subset of records, we decided to remove it altogether
-
-# COMMAND ----------
-
-# DBTITLE 1,Remove last few duplicate rows
-window_agg = Window.partitionBy(primary_keys)
-
-clean_airlines_df = prim_keys_airlines_df \
-    .withColumn("lit1", F.lit(1)) \
-    .withColumn("count", F.sum(F.col("lit1")).over(window_agg)) \
-    .filter(F.col("count")==1) \
-    .drop(*["lit1", "count"]) \
-    .cache()
-
-# COMMAND ----------
-
-dupe_count = clean_airlines_df.select(primary_keys).groupBy(primary_keys).count().filter(F.col("count") > 1).count()
-print(f"Number of duplicate records: {dupe_count}")
+dupe_flight_count = clean_airlines_df.select(primary_keys).groupBy(primary_keys).count().filter(F.col("count") > 1).count()
+print(f"Number of duplicate records: {dupe_flight_count}")
 
 # COMMAND ----------
 
@@ -346,7 +454,6 @@ print(f"Number of duplicate records: {dupe_count}")
 # MAGIC DEST_STATE_NM         | Destination Airport, State Name                                                                            | String
 # MAGIC DEST_STATE_ABR        | Destination Airport, State Code                                                                            | String
 # MAGIC CRS_DEP_TIME          | CRS Departure Time (local time: hhmm)                                                                      | Integer
-# MAGIC DEP_DELAY             | Difference in minutes between scheduled and actual departure time. Early departures show negative numbers. | Integer
 # MAGIC DEP_DEL15             | Departure Delay Indicator, 15 Minutes or More (1=Yes)                                                      | Integer
 
 # COMMAND ----------
@@ -413,25 +520,6 @@ display(clean_airlines_df \
 # COMMAND ----------
 
 display(clean_airlines_df)
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ##### Geoplot
-# MAGIC 
-# MAGIC As an additional EDA, we have plotted on the United States map the number of flights coming in and out of each state. In both maps, the shades of blue are very similar where the highest flight traffic occurs around California, Texas, and Florida. When we train our model, it can probably assume that if a flight comes in or out of those states that there is a higher probability for flight delays.
-
-# COMMAND ----------
-
-# DBTITLE 1,Origin Flights Map
-# See Visualization
-display(clean_airlines_df.groupBy("ORIGIN_STATE_ABR").count())
-
-# COMMAND ----------
-
-# DBTITLE 1,Destination Flights Map
-# See Visualization
-display(clean_airlines_df.groupBy("DEST_STATE_ABR").count())
 
 # COMMAND ----------
 
@@ -827,13 +915,6 @@ join_weather_df = clean_weather_df.withColumn('DATE', F.regexp_replace('DATE', '
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ##### COVID Impact
-# MAGIC In our EDA, we discovered that COVID had a huge impact on flights and the volume of it. To compensate for this anomaly, we decided to add a dummy variable called `COVID` which marked the beginning of travel bans for international flights during the Trump Administration. 
-# MAGIC - TODO: What's start (March 2020) and end date
-
-# COMMAND ----------
-
-# MAGIC %md
 # MAGIC #### Join Process
 # MAGIC We took a two-pronged approach to joining the dataframes. We started by joining the ORIGIN feature from the Airlines dataframe with the airport_id column from the Stations dataframe as well as the ORIGIN_STATE_ABR feature from the Airlines dataframe with neighbor_state from the Stations dataframe.
 
@@ -841,8 +922,8 @@ join_weather_df = clean_weather_df.withColumn('DATE', F.regexp_replace('DATE', '
 
 join_df1 = join_airlines_df.join(
     join_stations_df,
-    (balanced_airlines_df.ORIGIN == join_stations_df.neighbor_call) & \
-    (balanced_airlines_df.ORIGIN_STATE_ABR == join_stations_df.neighbor_state)
+    (join_airlines_df.ORIGIN == join_stations_df.neighbor_call) & \
+    (join_airlines_df.ORIGIN_STATE_ABR == join_stations_df.neighbor_state)
 )
 
 # COMMAND ----------
@@ -875,19 +956,16 @@ join_df2 = join_df1.join(
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ##### Drop and Rename Fields
+# MAGIC ##### Dimensionality Reduction
 # MAGIC 
 # MAGIC After joining the tables, we can drop some of the keys that are no longer relevant such as join keys and highly correlated fields. We also added an additional field called `WEATHER_DEP_DIFF_TIME` which is the amount of time between the flight departure time and the weather reading time. If the time difference is negative, then the weather reading time occurred after the flight departure
 
 # COMMAND ----------
 
-final_df = join_df2.withColumn(
-    'WEATHER_DEP_DIFF_TIME', 
-    F.col('UNIX_CRS_DEP_TIME_UTC') - F.col('UNIX_WEATHER_TIME')
-).select(
+final_df = join_df2.select(
     F.col('DEP_DEL15'),
     F.col('UNIX_WEATHER_TIME'),
-    F.col('WEATHER_DEP_DIFF_TIME'),
+    F.col('UNIX_CRS_DEP_TIME_UTC'),
     F.col('LATITUDE'),
     F.col('LONGITUDE'),
     F.col('ELEVATION'),
@@ -911,17 +989,19 @@ display(final_df)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC Altogether, the join took around 4.36 minutes to display and 8.31 minutes to write to blob storage on four 4-core 16-gb worker nodes. 
+# MAGIC Altogether, the join took around 5.84 minutes to display and 7.42 minutes to write to blob storage on four 4-core 16-gb worker nodes. 
 
 # COMMAND ----------
 
 # DBTITLE 1,Write to blob storage
-final_df.write.mode("overwrite").parquet(f"{blob_url}/final_df_7")
+final_df.write.mode("overwrite").parquet(f"{blob_url}/final_df_9")
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ### Metrics
+# MAGIC 
+# MAGIC > - What other kinds of metrics can we gather even if they are simple?
 
 # COMMAND ----------
 
@@ -957,16 +1037,42 @@ _ = plot_correlation_matrix(sample_final_df, title="Final Dataframe Correlation 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Model Pipeline
-# MAGIC 
+# MAGIC ## Model
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ### Key Steps
-# MAGIC 
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ### Feature Engineering
 # MAGIC 
 # MAGIC > Feature Engineering
 # MAGIC > - Describe newly engineering features that were added (in the form of feature families if possible)
 # MAGIC > - Show the impact (if any) that these new features added to the model in the modeling pipelines section below
 # MAGIC > - Explain why you chose the method and approach in presentation/results/discussion sections
+# MAGIC > - Create new features that are highly predictive:
+# MAGIC >     - at least one time-based feature, e.g., recency, frequency, monetary, (RFM)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### COVID Impact
+# MAGIC In our EDA, we discovered that COVID had a huge impact on flights and the volume of it. To compensate for this anomaly, we decided to add a dummy variable called `COVID` which marked the beginning of travel bans for international flights during the Trump Administration. 
+# MAGIC - TODO: What's start (March 2020) and end date
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Time Difference from Flight Departure Time and Weather Reading
+# MAGIC     ```'WEATHER_DEP_DIFF_TIME' = 
+# MAGIC     F.col('UNIX_CRS_DEP_TIME_UTC') - F.col('UNIX_WEATHER_TIME')```
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC 
 # MAGIC ### Pipelines
 # MAGIC > Modeling Pipelines
@@ -986,6 +1092,13 @@ _ = plot_correlation_matrix(sample_final_df, title="Final Dataframe Correlation 
 # MAGIC > Provide sample:
 # MAGIC > - Plots of loss and other score curves per epoch/tree
 # MAGIC 
+# MAGIC > Feedback from previous phase
+# MAGIC > - Don't use accuracy, your dataset is not balanced. There are way more flights on time then delayed. Please describe why you are using cross validation
+# MAGIC > - Need more details within this section. Why are you using the success metrics that you are using? Make a business case and why that specific metric of success fits the case. Do not use accuracy as the data is unbalanced.
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ### Hyperparameters
 # MAGIC 
 # MAGIC > Hyperparameter Tuning
@@ -998,6 +1111,9 @@ _ = plot_correlation_matrix(sample_final_df, title="Final Dataframe Correlation 
 # MAGIC ## Results
 # MAGIC > Results
 # MAGIC > - Make sure your experiments are properly enumerated/tabulated and discussed (they are missing accurate descriptions, performance metrics). 
+# MAGIC 
+# MAGIC > Feedback from previous phase
+# MAGIC > - Results section was lacking any analysis. Why did your last fold do not as well? What about the threshold in logistic regression?
 
 # COMMAND ----------
 
@@ -1019,6 +1135,9 @@ _ = plot_correlation_matrix(sample_final_df, title="Final Dataframe Correlation 
 # MAGIC > - Summarize main points of your project: Remind your readers of your key contributions.
 # MAGIC > - Discuss the significance of your results
 # MAGIC > - Discuss the future of your project.
+# MAGIC 
+# MAGIC > Feedback from previous phase
+# MAGIC > - In the abstract you mentioned that weather had little to no impact but that same sentiment was not carried out in the conclusion. It actually seemed like certain weather features did have an impact. There was no restatement of the hypothesis.
 
 # COMMAND ----------
 
@@ -1030,11 +1149,21 @@ _ = plot_correlation_matrix(sample_final_df, title="Final Dataframe Correlation 
 # MAGIC > - A credit assignment plan not in Table format means ZERO points
 # MAGIC > - No start and end dates and (budgeted) hours of effort mean an incomplete plan. This may result in zero points.
 # MAGIC 
+# MAGIC > Feedback from previous phase
+# MAGIC > - Please follow the instructions regarding the submission of files, mainly that you need to submit an HTML file of the main report (NOT a ZIP file), same with the ipynb. The credit assignment plan needs to have the amount of time it took to complete each task and the tasks need to be more detailed.
+# MAGIC 
 # MAGIC | Task | Estimated Improvement | Hours Spent | Start Date | End Date | Team Member
 # MAGIC | ---- | --------------------- | ----------- | ---------- | -------- | ----------- |
-# MAGIC | Migrate Introduction from Google Doc to Jupyter Notebook           | 0 | 24 | 11/19 | 11/22 | Steven Sung |
-# MAGIC | Added COVID flight restriction binary variable                     |   |    |       |       | Steven Sung |
-# MAGIC | Change metric from accuracy to precicion                           |   | 2  | 11/21 | 11/21 | Steven Sung |
+# MAGIC | Add list of tasks to do for Phase 3                                | 0 | 0.5 | 11/18 | 11/18 | Steven Sung |
+# MAGIC | Migrate Introduction from Google Doc to Jupyter Notebook           | 0 | 2  | 11/19 | 11/19 | Steven Sung |
+# MAGIC | Combine all 5 Jupyter Notebooks into Phase 3 Master Notebook       | 0 | 24 | 11/19 | 11/21 | Steven Sung |
+# MAGIC | Rewrote "Problem" section under "Introduction" based on feedback   | 0 | 1  | 11/22 | 11/22 | Steven Sung |
+# MAGIC | Rewrote "Datasets" section under "Introduction" based on feedback  | 0 | 1  | 11/22 | 11/22 | Steven Sung |
+# MAGIC | Add dataset workflow diagram from raw to clean                     | 0 | 0.5 | 11/22 | 11/22 | Steven Sung |
+# MAGIC | Rewrote "Airlines" section under "Dataset" based on feedback       | 0 | 2  | 11/22 | 11/22 | Steven Sung |
+# MAGIC | Remove data balancing                                              |   | 0.25| 11/21 | 11/21 | Steven Sung |
+# MAGIC | Changed join diagram                                               |   | 1  | 11/22 | 11/22 | Justin Chan |
+# MAGIC | Added COVID flight restriction binary variable                     |   |    |       |       | |
 
 # COMMAND ----------
 
