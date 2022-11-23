@@ -92,7 +92,7 @@ spark.conf.set(f"fs.azure.sas.{blob_container}.{storage_account}.blob.core.windo
 
 # DBTITLE 1,Read clean tables from storage if applicable (update filepath as needed)
 # Make sure that the filepath version is the latest one
-clean_airlines_df = spark.read.parquet(f"{blob_url}/clean_airlines_1")
+clean_airlines_df = spark.read.parquet(f"{blob_url}/clean_airlines_2")
 clean_stations_df = spark.read.parquet(f"{blob_url}/clean_stations_1")
 clean_weather_df = spark.read.parquet(f"{blob_url}/clean_weather_2")
 final_df = spark.read.parquet(f"{blob_url}/final_df_9")
@@ -143,7 +143,7 @@ final_df = spark.read.parquet(f"{blob_url}/final_df_9")
 # MAGIC 
 # MAGIC We have been tasked by the FAA to set new flight regulations based on hazardous weather conditions. Dangerous weather can risk the health of many passengers and employees. We aim to create new standards by observing flight delays impacted by weather. More specifically, what type of weather conditions will create flight delays longer than 15 minutes. If flights are cancelled or delayed due to severe and hazardous weather like rainstorms, floods, or blizzards, it can decrease our customer satisfaction, revenue, and long term economic growth. By decreasing delays, airlines can send out more flights at approriate times to increase their revenue and decrease flight fatalities.
 # MAGIC 
-# MAGIC To solve this problem, we plan to understand the correlation between weather and flight delays using machine learning models. We define a flight delay as a any flight departing 15 minutes later than expected scheduled departure time. Data on severe weather such as tornados, heavy winds, and floods is captured in weather stations, where we can correlate this data with air flight delays.
+# MAGIC To solve this problem, we plan to understand the correlation between weather and flight delays using machine learning models. We define a flight delay as a any flight departing 15 minutes later than expected scheduled departure time. Data on severe weather such as tornados, heavy winds, and floods is captured by stations, where we can correlate this data with air flight delays.
 
 # COMMAND ----------
 
@@ -159,7 +159,7 @@ final_df = spark.read.parquet(f"{blob_url}/final_df_9")
 # MAGIC > - How will these datasets help us?
 # MAGIC > - What is our steps in a high overview.
 # MAGIC 
-# MAGIC We will leverage three data sets which are airline, weather, and station data. The airline and station dataset were retrieved from the [US Department of Transportation](https://www.transtats.bts.gov/homepage.asp) and the weather data was obtained by the [National Oceanic and Atmospheric Administration Repository](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C00679). We used these specific datasets since they were open source and contained a lot of recent information about flights and weather data. Since these datasets come from different data sources with no guarantees about data integrity, we must do our own exploratory data anlaysis on each table
+# MAGIC We will leverage three data sets which are airline, station, and weather data. The airline and station dataset were retrieved from the [US Department of Transportation](https://www.transtats.bts.gov/homepage.asp) and the weather data was obtained by the [National Oceanic and Atmospheric Administration Repository](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C00679). We used these specific datasets since they were open source and contained a lot of recent information about flights and weather data. Since these datasets come from different data sources with no guarantees about data integrity, we must do our own exploratory data anlaysis on each table
 # MAGIC 
 # MAGIC The datasets were downloaded and converted into parquet files into Azure Blob Cloud Storage so that reading and writing the files over millions of records would be fast. When ready to analyze the data, we pulled the data from the cloud into PySpark dataframes through EDA like plots and histograms. Once we have a better understanding of each dataset, we will clean each dataframe based on null counts and create checkpoints for the celan dataframes so that they can be referenced later. A join on keys like date, time, and location will combine all three datasets into one master table which will be used to train our models as well as any additional EDA.
 # MAGIC 
@@ -168,7 +168,7 @@ final_df = spark.read.parquet(f"{blob_url}/final_df_9")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC <img src="https://github.com/sysung/w261-final-project/blob/master/full_workflow_pipeline.drawio%20(1).png?raw=true" width=90%>
+# MAGIC <img src="https://github.com/sysung/w261-final-project/blob/master/full_workflow_pipeline.drawio%20(1).png?raw=true" width=80%>
 
 # COMMAND ----------
 
@@ -208,7 +208,7 @@ final_df = spark.read.parquet(f"{blob_url}/final_df_9")
 
 # COMMAND ----------
 
-# DBTITLE 1,Display raw row and column count
+# DBTITLE 0,Display raw row and column count
 print(f"Raw Airlines Row Count: {raw_airlines_df.count()}")
 print(f"Raw Airlines Column Count: {len(raw_airlines_df.columns)}")
 
@@ -218,6 +218,10 @@ print(f"Raw Airlines Column Count: {len(raw_airlines_df.columns)}")
 # MAGIC ##### Null Counts
 # MAGIC 
 # MAGIC The first form of EDA that we did was look for null counts in the raw data set. Raw data usually contains nulls from either human error or by logic, for example, if the field is not applicable to the flight. The histogram is sorted by the indices that the column appears in the raw table. We've removed all columns which have no nulls so that we can see which field has the highest null counts. 
+
+# COMMAND ----------
+
+
 
 # COMMAND ----------
 
@@ -460,11 +464,11 @@ print(f"Number of duplicate records: {dupe_flight_count}")
 
 # MAGIC %md
 # MAGIC ##### Summary Statistics
-# MAGIC The new clean airlines dataframe contains 41,577,767 rows and 21 columns.
+# MAGIC The new clean airlines dataframe contains 34,794,709 rows and 20 columns.
 
 # COMMAND ----------
 
-# DBTITLE 1,Display clean row and column count
+# DBTITLE 0,Display clean row and column count
 print(f"Clean Airlines Row Count: {clean_airlines_df.count()}")
 print(f"Clean Airlines Column Count: {len(clean_airlines_df.columns)}")
 
@@ -475,7 +479,7 @@ print(f"Clean Airlines Column Count: {len(clean_airlines_df.columns)}")
 
 # COMMAND ----------
 
-# DBTITLE 1,Run Data Profile over clean airlines dataframe
+# DBTITLE 0,Run Data Profile over clean airlines dataframe
 dbutils.data.summarize(clean_airlines_df)
 
 # COMMAND ----------
@@ -572,61 +576,48 @@ def plot_correlation_matrix(df, method='pearson', title="Correlation Matrix"):
 
 # COMMAND ----------
 
-airlines_cor_matrix =plot_correlation_matrix(clean_airlines_df, title="Clean Airlines Correlation Matrix")
+_ = plot_correlation_matrix(clean_airlines_df, title="Clean Airlines Correlation Matrix")
 
 # COMMAND ----------
 
 # DBTITLE 1,Write into blob storage
-clean_airlines_df.write.mode("overwrite").parquet(f"{blob_url}/clean_airlines_1")
+clean_airlines_df.write.mode("overwrite").parquet(f"{blob_url}/clean_airlines_2")
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC #### Stations
-# MAGIC 
-# MAGIC Looking at the row and column count, the raw stations datafrmae contains 5,004,169 rows and 12 columns.
-
-# COMMAND ----------
-
-print(f"Raw Stations Row Count: {raw_stations_df.count()}")
-print(f"Raw Stations Column Count: {len(raw_stations_df.columns)}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ##### Data Dictionary
-# MAGIC When performing exploratory data analysis on the raw features of the stations, we first looked at the underlying data including its definition by referencing a data dictionary that we compiled from various sources, which we show below.
+# MAGIC ##### Data Description
 # MAGIC 
-# MAGIC Field                | Description                                                                                                                                      | Data Type
-# MAGIC -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------
-# MAGIC usaf                 | A character string identifying the fixed weather station from the USAF(United States Air Force) Master Station Catalog                           | STRING
-# MAGIC wban                 | WBAN(Weather Bureau, Air Force and Navy) is a five-digit station identifier for digital data storage and general station identification purposes | STRING
-# MAGIC station_id           | Identifier for the weather station                                                                                                               | STRING
-# MAGIC lat                  | Latitude coordinates for the weather station                                                                                                     | DOUBLE
-# MAGIC lon                  | Longitude coordinates for the weather station                                                                                                    | DOUBLE
-# MAGIC neighbor_id          | Identifier for the airport close to the weather station                                                                                          | STRING
-# MAGIC neighbor_name        | Name of the airport close to the weather station                                                                                                 | STRING 
-# MAGIC neighbor_state       | State of the airport close to the weather station                                                                                                | STRING 
-# MAGIC neighbor_call        | A four-letter alphanumeric code representing the ICAO airport code or location indicator                                                         | STRING 
-# MAGIC neighbor_lat         | Latitude coordinates of the airport close to the weather station                                                                                 | DOUBLE
-# MAGIC neighbor_lon         | Latitude coordinates of the airport close to the weather station                                                                                 | DOUBLE
-# MAGIC distance_to_neighbor |  Distance of the airport to the weather station.                                                                                                 | STRING
+# MAGIC  Each record of the stations dataset is an edge between two stations. The unique identifier of weather station is `station_id` whereas airport is `neighbor_id`. We can also see that the relationship is many to many. For a given `station_id` and `neighbor_id` we've displayed below, we see multiple stations connected to it, and even to itself. However, there are no guarantees that a station-to-station relationship goes both ways. For example, in the picture below, there are many bidirectional arrows, but it's possible where one station (Station B) can see the other (Station F). Stations also don't necessarily also need to point to each other, like Station A and Station D.
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ##### Summary Statistic
-# MAGIC Next, we looked for null values within the dataframe; fortunately, this dataframe required little pre-processing, given there were no null values contained within the dataframe. We then looked at the dataframe at a high level, using the summarize function to better understand summary statistics of each of the features as is shown below.
+# MAGIC <img src="https://github.com/sysung/w261-final-project/blob/master/full_workflow_pipeline-Page-2.drawio.png?raw=true" width=50%>
 
 # COMMAND ----------
 
-dbutils.data.summarize(raw_stations_df)
+# MAGIC %md
+# MAGIC Other than the ids, each record also contains the latitude, longitude, and other geographic information about both stations. There is also a distance between two stations which can be useful in finding the nearest station
+
+# COMMAND ----------
+
+display(raw_stations_df.filter(F.col('station_id')==69002093218))
+
+# COMMAND ----------
+
+display(raw_stations_df.filter(F.col('neighbor_id')==6900209321869002093218))
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ##### Station Distance to Neighbor
-# MAGIC Within this dataframe, logically, we found that the station’s “distance_to_neighbor” would be the most important feature to apply to our model, given that the closer a station is to an airport in proximity, the higher likelihood that the weather forecast/data is accurate. Since inclement weather can often impact flight delays, we decided to run a groupBy on states and measure each station’s average distance to neighbor, expecting more remote states to be farther away from stations. The chart below shows the output. 
+# MAGIC Within this dataframe, logically, we found that the station’s `distance_to_neighbor` would be the most important feature to clean our dataset, given that the closer a station is to an airport in proximity, the higher likelihood that the weather forecast/data is accurate. Since incremental weather chagnes can impact flight delays, we decided to run a groupBy on states and measure each station’s average distance to neighbor, expecting more remote states to be farther away from stations. The chart below shows the output. 
 
 # COMMAND ----------
 
@@ -650,7 +641,7 @@ plt.show()
 # MAGIC %md
 # MAGIC ##### Duplicate Stations
 # MAGIC 
-# MAGIC With almost 5 million rows, we can see that there is a high possibility that there are duplicate stations. Since each row represents an edge between stations and airport, there is a possibility that a station can point to numerous airports and vice versa. To ensure that each row is distinct such that each station only contains a unique airport, we decided to use the closest airport distance to station using a window function. 
+# MAGIC With almost 5 million rows, we can see that there is a high possibility that there are duplicate stations. Since each row represents an edge between stations, there is a possibility that a station can point to numerous airports and vice versa. To ensure that each row is distinct such that each station only contains a unique airport, we decided to use the closest airport distance to station using a window function. 
 
 # COMMAND ----------
 
@@ -665,6 +656,7 @@ display(clean_stations_df)
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ##### Summary Statistic
 # MAGIC After the cleaning of the dataframe, we are left with 2,229 rows which greatly reduces the complexity of our joins
 
 # COMMAND ----------
@@ -674,7 +666,39 @@ print(f"Clean Stations Column Count: {len(clean_stations_df.columns)}")
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ##### Null Count
+# MAGIC 
+# MAGIC Next, we looked for null values within the dataframe; fortunately, there were no null values contained within the dataframe. We then looked at the dataframe at a high level, using the summarize function to better understand summary statistics of each of the features as is shown below.
+# MAGIC 
+# MAGIC We see that the distributions of `lat` and `neighbor_lat` are extremely similar as well as `lon` and `neighbor_lon`. This is expected since stations are located in the United States.
+# MAGIC 
+# MAGIC After the removal of duplicate stations, the distance to neighbor is all zero, which means that most of the stations, if not all, are actually pointing to itself.
+
+# COMMAND ----------
+
 dbutils.data.summarize(clean_stations_df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Data Dictionary
+# MAGIC When performing exploratory data analysis on the raw features of the stations, we first looked at the underlying data including its definition by referencing a data dictionary that we compiled from various sources, which we show below.
+# MAGIC 
+# MAGIC Field                | Description                                                                                                                                      | Data Type
+# MAGIC -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------
+# MAGIC usaf                 | A character string identifying the fixed weather station from the USAF(United States Air Force) Master Station Catalog                           | STRING
+# MAGIC wban                 | WBAN(Weather Bureau, Air Force and Navy) is a five-digit station identifier for digital data storage and general station identification purposes | STRING
+# MAGIC station_id           | Identifier for the weather station                                                                                                               | STRING
+# MAGIC lat                  | Latitude coordinates for the weather station                                                                                                     | DOUBLE
+# MAGIC lon                  | Longitude coordinates for the weather station                                                                                                    | DOUBLE
+# MAGIC neighbor_id          | Identifier for the airport close to the weather station                                                                                          | STRING
+# MAGIC neighbor_name        | Name of the airport close to the weather station                                                                                                 | STRING 
+# MAGIC neighbor_state       | State of the airport close to the weather station                                                                                                | STRING 
+# MAGIC neighbor_call        | A four-letter alphanumeric code representing the ICAO airport code or location indicator                                                         | STRING 
+# MAGIC neighbor_lat         | Latitude coordinates of the airport close to the weather station                                                                                 | DOUBLE
+# MAGIC neighbor_lon         | Latitude coordinates of the airport close to the weather station                                                                                 | DOUBLE
+# MAGIC distance_to_neighbor |  Distance of the airport to the weather station.                                                                                                 | STRING
 
 # COMMAND ----------
 
@@ -1157,13 +1181,13 @@ _ = plot_correlation_matrix(sample_final_df, title="Final Dataframe Correlation 
 # MAGIC | Add list of tasks to do for Phase 3                                | 0 | 0.5 | 11/18 | 11/18 | Steven Sung |
 # MAGIC | Migrate Introduction from Google Doc to Jupyter Notebook           | 0 | 2  | 11/19 | 11/19 | Steven Sung |
 # MAGIC | Combine all 5 Jupyter Notebooks into Phase 3 Master Notebook       | 0 | 24 | 11/19 | 11/21 | Steven Sung |
+# MAGIC | Remove data balancing                                              |   | 0.25| 11/21 | 11/21 | Steven Sung |
 # MAGIC | Rewrote "Problem" section under "Introduction" based on feedback   | 0 | 1  | 11/22 | 11/22 | Steven Sung |
 # MAGIC | Rewrote "Datasets" section under "Introduction" based on feedback  | 0 | 1  | 11/22 | 11/22 | Steven Sung |
 # MAGIC | Add dataset workflow diagram from raw to clean                     | 0 | 0.5 | 11/22 | 11/22 | Steven Sung |
-# MAGIC | Rewrote "Airlines" section under "Dataset" based on feedback       | 0 | 2  | 11/22 | 11/22 | Steven Sung |
-# MAGIC | Remove data balancing                                              |   | 0.25| 11/21 | 11/21 | Steven Sung |
-# MAGIC | Changed join diagram                                               |   | 1  | 11/22 | 11/22 | Justin Chan |
-# MAGIC | Added COVID flight restriction binary variable                     |   |    |       |       | |
+# MAGIC | Rewrote "Airlines" section under "Dataset" based on feedback       | 0 | 3  | 11/22 | 11/22 | Steven Sung |
+# MAGIC | Rewrote "Stations" section under "Dataset" based on feedback       | 0 | 2  | 11/22 | 11/22 | Steven Sung |
+# MAGIC | Changed join diagram                                               | 0 | 1  | 11/22 | 11/22 | Justin Chan |
 
 # COMMAND ----------
 
